@@ -5,7 +5,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { Layout } from "@/components/layout";
 import Dashboard from "@/pages/dashboard";
-import PenjualanRealtime from "@/pages/penjualan-realtime";
 
 const queryClient = new QueryClient();
 
@@ -14,7 +13,6 @@ function Router() {
     <Layout>
       <Switch>
         <Route path="/" component={Dashboard} />
-        <Route path="/penjualan-realtime" component={PenjualanRealtime} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

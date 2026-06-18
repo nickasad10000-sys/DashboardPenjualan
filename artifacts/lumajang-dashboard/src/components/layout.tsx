@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { LayoutDashboard, TrendingUp, RefreshCw, Menu } from "lucide-react";
+import { LayoutDashboard, RefreshCw, Menu } from "lucide-react";
 import { useRefreshLumajangData, useGetLumajangSummary, getGetLumajangSummaryQueryKey, getGetLumajangKecamatanQueryKey, getGetLumajangDevelopersQueryKey, getGetLumajangListingsQueryKey } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -11,7 +11,6 @@ import { id } from "date-fns/locale";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/penjualan-realtime", label: "Penjualan Realtime", icon: TrendingUp },
 ];
 
 function SidebarContent({ currentLocation }: { currentLocation: string }) {

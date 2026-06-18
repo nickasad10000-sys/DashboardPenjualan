@@ -1,4 +1,4 @@
-import { useState, Fragment } from "react";
+import { useState, Fragment, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   useGetLumajangSummary,
@@ -461,6 +461,56 @@ export default function Dashboard() {
     ? Math.round((summary.scraping.pagesScraped / summary.scraping.totalPages) * 100)
     : 0;
 
+  const currentMonth = new Date().toISOString().slice(0, 7);
+
+  const topPerumahanBySales = useMemo(() => {
+    const map = new Map<string, { name: string; fullName: string; developer: string; total: number }>();
+    for (const ev of saleEvents) {
+      for (const c of ev.listingChanges) {
+        const prev = map.get(c.idLokasi);
+        if (prev) {
+          prev.total += c.unitLaku;
+        } else {
+          map.set(c.idLokasi, {
+            name: c.namaPerumahan.length > 20 ? c.namaPerumahan.slice(0, 20) + "…" : c.namaPerumahan,
+            fullName: c.namaPerumahan,
+            developer: c.namaDeveloper,
+            total: c.unitLaku,
+          });
+        }
+      }
+    }
+    return [...map.values()]
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10)
+      .map((p) => ({ name: p.name, fullName: p.fullName, developer: p.developer, "Unit Terjual": p.total }));
+  }, [saleEvents]);
+
+  const { topDeveloperData, developerPeriodLabel } = useMemo(() => {
+    const buildMap = (evs: typeof saleEvents) => {
+      const m = new Map<string, number>();
+      for (const ev of evs) {
+        for (const c of ev.listingChanges) {
+          m.set(c.namaDeveloper, (m.get(c.namaDeveloper) ?? 0) + c.unitLaku);
+        }
+      }
+      return m;
+    };
+    const thisMonthEvs = saleEvents.filter((e) => e.recordedAt.startsWith(currentMonth));
+    const useAllTime = thisMonthEvs.length === 0;
+    const map = buildMap(useAllTime ? saleEvents : thisMonthEvs);
+    const label = useAllTime ? "Sepanjang Waktu" : `Bulan ${new Date().toLocaleDateString("id-ID", { month: "long", year: "numeric" })}`;
+    const data = [...map.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, total]) => ({
+        name: name.length > 18 ? name.slice(0, 18) + "…" : name,
+        fullName: name,
+        "Unit Terjual": total,
+      }));
+    return { topDeveloperData: data, developerPeriodLabel: label };
+  }, [saleEvents, currentMonth]);
+
   if (isLoading) {
     return (
       <div className="space-y-6 p-1">
@@ -488,16 +538,6 @@ export default function Dashboard() {
       "Total Stok": k.supply,
       "Sudah Dipilih": k.pilihan,
     }));
-
-  const topPerumahan = [...allListings]
-    .map((l) => ({
-      name: l.namaPerumahan.length > 22 ? l.namaPerumahan.slice(0, 22) + "…" : l.namaPerumahan,
-      fullName: l.namaPerumahan,
-      "Stok": parseInt(l.jumlahUnit ?? "0", 10) || 0,
-    }))
-    .filter((l) => l["Stok"] > 0)
-    .sort((a, b) => b["Stok"] - a["Stok"])
-    .slice(0, 15);
 
   const pieData = [
     { name: "Dipilih", value: summary.totalDipilih, color: "#eab308" },
@@ -666,13 +706,95 @@ export default function Dashboard() {
               )}
               {saleEvents.length > 5 && (
                 <p className="text-xs text-center text-muted-foreground pt-1">
-                  +{saleEvents.length - 5} event lainnya di tab Penjualan Realtime
+                  +{saleEvents.flatMap(e => e.listingChanges).length - 5} transaksi lainnya tercatat
                 </p>
               )}
             </div>
           )}
         </CardContent>
       </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+              <TrendingDown className="h-4 w-4 text-green-600" />
+              Total Penjualan Terbanyak — per Perumahan
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">Akumulasi unit terjual sejak monitoring aktif</p>
+          </CardHeader>
+          <CardContent className="px-2 sm:px-4">
+            {topPerumahanBySales.length === 0 ? (
+              <div className="flex items-center justify-center h-40 text-center">
+                <div>
+                  <Activity className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">Belum ada data penjualan</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Refresh data minimal 2x untuk mulai mendeteksi</p>
+                </div>
+              </div>
+            ) : (
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={topPerumahanBySales}
+                    layout="vertical"
+                    margin={{ top: 4, right: 24, left: 4, bottom: 4 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={108} />
+                    <Tooltip
+                      formatter={(v: number) => [`${v} unit`, "Terjual"]}
+                      labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName ?? ""}
+                    />
+                    <Bar dataKey="Unit Terjual" fill="#22c55e" radius={[0, 3, 3, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+              <Building className="h-4 w-4 text-purple-600" />
+              Developer Terlaris — {developerPeriodLabel}
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">Ranking developer berdasarkan unit terjual</p>
+          </CardHeader>
+          <CardContent className="px-2 sm:px-4">
+            {topDeveloperData.length === 0 ? (
+              <div className="flex items-center justify-center h-40 text-center">
+                <div>
+                  <Activity className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">Belum ada data penjualan</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Refresh data minimal 2x untuk mulai mendeteksi</p>
+                </div>
+              </div>
+            ) : (
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={topDeveloperData}
+                    layout="vertical"
+                    margin={{ top: 4, right: 24, left: 4, bottom: 4 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={108} />
+                    <Tooltip
+                      formatter={(v: number) => [`${v} unit`, "Terjual"]}
+                      labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName ?? ""}
+                    />
+                    <Bar dataKey="Unit Terjual" fill="#8b5cf6" radius={[0, 3, 3, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <LokasiModal open={openModal === "lokasi"} onClose={() => setOpenModal(null)} />
       <DeveloperModal open={openModal === "developer"} onClose={() => setOpenModal(null)} />
