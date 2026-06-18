@@ -1,0 +1,335 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: API specification for Dashboard Perumahan Lumajang
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: lumajang
+    description: Data perumahan Kab. Lumajang
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /lumajang/summary:
+    get:
+      operationId: getLumajangSummary
+      tags: [lumajang]
+      summary: Ringkasan stok, dipilih, dan sisa per kabupaten Lumajang
+      responses:
+        "200":
+          description: Summary data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LumajangSummary"
+
+  /lumajang/kecamatan:
+    get:
+      operationId: getLumajangKecamatan
+      tags: [lumajang]
+      summary: Data supply/demand per kecamatan di Lumajang
+      responses:
+        "200":
+          description: Kecamatan list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KecamatanData"
+
+  /lumajang/developers:
+    get:
+      operationId: getLumajangDevelopers
+      tags: [lumajang]
+      summary: Data listing perumahan per developer di Lumajang
+      responses:
+        "200":
+          description: Developer list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DeveloperData"
+
+  /lumajang/listings:
+    get:
+      operationId: getLumajangListings
+      tags: [lumajang]
+      summary: Daftar lokasi perumahan di Lumajang
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+        - name: kecamatan
+          in: query
+          required: false
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: Listings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListingsResponse"
+
+  /lumajang/listings/{idLokasi}:
+    get:
+      operationId: getLumajangListingDetail
+      tags: [lumajang]
+      summary: Detail lokasi perumahan
+      parameters:
+        - name: idLokasi
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Listing detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListingDetail"
+
+  /lumajang/refresh:
+    post:
+      operationId: refreshLumajangData
+      tags: [lumajang]
+      summary: Refresh cache data dari SIKUMBANG
+      responses:
+        "200":
+          description: Refresh result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshResult"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ScrapingStatus:
+      type: object
+      required:
+        - inProgress
+        - pagesScraped
+        - totalPages
+      properties:
+        inProgress:
+          type: boolean
+        pagesScraped:
+          type: integer
+        totalPages:
+          type: integer
+
+    LumajangSummary:
+      type: object
+      required:
+        - totalLokasi
+        - totalDeveloper
+        - totalStok
+        - totalDipilih
+        - totalSisa
+        - totalPeminatan
+        - totalUnitFromListings
+        - lastUpdated
+        - scraping
+      properties:
+        totalLokasi:
+          type: integer
+        totalDeveloper:
+          type: integer
+        totalStok:
+          type: integer
+        totalDipilih:
+          type: integer
+          description: Jumlah unit yang dipilih/diminati (field pilihan dari SIKUMBANG — bukan transaksi terjual)
+        totalSisa:
+          type: integer
+        totalPeminatan:
+          type: integer
+        totalUnitFromListings:
+          type: integer
+        lastUpdated:
+          type: string
+        scraping:
+          $ref: "#/components/schemas/ScrapingStatus"
+
+    KecamatanData:
+      type: object
+      required:
+        - kodeWilayah
+        - namaWilayah
+        - supply
+        - peminatan
+        - pilihan
+        - sisa
+      properties:
+        kodeWilayah:
+          type: string
+        namaWilayah:
+          type: string
+        supply:
+          type: integer
+        peminatan:
+          type: integer
+        pilihan:
+          type: integer
+        sisa:
+          type: integer
+
+    DeveloperData:
+      type: object
+      required:
+        - namaDeveloper
+        - asosiasi
+        - jumlahLokasi
+        - totalUnit
+        - listings
+      properties:
+        namaDeveloper:
+          type: string
+        asosiasi:
+          type: string
+        jumlahLokasi:
+          type: integer
+        totalUnit:
+          type: integer
+        listings:
+          type: array
+          items:
+            $ref: "#/components/schemas/ListingItem"
+
+    ListingItem:
+      type: object
+      required:
+        - idLokasi
+        - namaPerumahan
+        - jenisPerumahan
+        - kecamatan
+        - kelurahan
+        - namaDeveloper
+        - asosiasi
+        - jumlahUnit
+        - foto
+      properties:
+        idLokasi:
+          type: string
+        namaPerumahan:
+          type: string
+        jenisPerumahan:
+          type: string
+        kecamatan:
+          type: string
+        kelurahan:
+          type: ["string", "null"]
+        namaDeveloper:
+          type: string
+        asosiasi:
+          type: string
+        jumlahUnit:
+          type: ["string", "null"]
+        foto:
+          type: array
+          items:
+            type: string
+
+    ListingsResponse:
+      type: object
+      required:
+        - data
+        - total
+        - page
+        - limit
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ListingItem"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    ListingDetail:
+      type: object
+      required:
+        - idLokasi
+        - namaPerumahan
+        - jenisPerumahan
+        - kecamatan
+        - kelurahan
+        - namaDeveloper
+        - asosiasi
+        - jumlahUnit
+        - foto
+      properties:
+        idLokasi:
+          type: string
+        namaPerumahan:
+          type: string
+        jenisPerumahan:
+          type: string
+        kecamatan:
+          type: string
+        kelurahan:
+          type: ["string", "null"]
+        namaDeveloper:
+          type: string
+        asosiasi:
+          type: string
+        jumlahUnit:
+          type: ["string", "null"]
+        foto:
+          type: array
+          items:
+            type: string
+
+    RefreshResult:
+      type: object
+      required:
+        - success
+        - message
+        - timestamp
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        timestamp:
+          type: string

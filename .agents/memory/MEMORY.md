@@ -1,0 +1,3 @@
+- [SIKUMBANG full-page scraping](sikumbang-scraping.md) — Lumajang listings tersebar di seluruh 1116 halaman, tidak ada filter kabupaten — harus scrape semua.
+- [Vercel + Supabase migration](vercel-supabase-migration.md) — Full migration pattern: chunked scraping from browser, Supabase for persistence, no long-running processes.
+- [Dashboard map & layout](dashboard-design.md) — MapLibre GL (bukan react-leaflet), koordinat per listing dari SIKUMBANG detail endpoint, fallback kecamatan+jitter. 3 stat card saja, StokModal per perumahan, grafik horizontal bar stok per perumahan.

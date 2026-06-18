@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "t16QVx7w6r3XLl7og5zgp"
+uri = "file://lumajang-vercel/PANDUAN-DEPLOY.md"
+type = "text"
+title = "Panduan Deploy — Vercel + Supabase"

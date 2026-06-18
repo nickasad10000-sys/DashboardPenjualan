@@ -1,0 +1,53 @@
+name: Scrape SIKUMBANG Lumajang
+
+on:
+  schedule:
+    # Setiap 30 menit (GitHub Actions gratis untuk repo publik)
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Alasan trigger manual"
+        required: false
+        default: "Manual refresh"
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Trigger refresh endpoint
+        env:
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
+        run: |
+          if [ -z "$DASHBOARD_URL" ]; then
+            echo "ERROR: DASHBOARD_URL secret belum diset."
+            echo "Set secret DASHBOARD_URL di repository settings dengan URL dashboard yang sudah deploy."
+            echo "Contoh: https://nama-app.replit.app/api"
+            exit 1
+          fi
+
+          echo "Mengirim request refresh ke: $DASHBOARD_URL/lumajang/refresh"
+
+          RESPONSE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --max-time 30 \
+            "$DASHBOARD_URL/lumajang/refresh")
+
+          echo "HTTP Status: $RESPONSE"
+          echo "Response body:"
+          cat /tmp/response.json
+
+          if [ "$RESPONSE" -ge 200 ] && [ "$RESPONSE" -lt 300 ]; then
+            echo "✅ Refresh berhasil dipicu"
+          else
+            echo "❌ Refresh gagal dengan status $RESPONSE"
+            exit 1
+          fi
+
+      - name: Log hasil
+        run: |
+          echo "Waktu scrape: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "Scraping berjalan di server — data diperbarui secara async"
