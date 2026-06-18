@@ -48,6 +48,21 @@ interface SaleEvent {
   totalLaku: number;
 }
 
+interface NotificationConfig {
+  webhookUrl: string;
+  webhookEnabled: boolean;
+  emailEnabled: boolean;
+  emailSmtp: string;
+  emailPort: number;
+  emailUser: string;
+  emailPass: string;
+  emailTo: string;
+  notifyOnSale: boolean;
+  notifyOnRefreshComplete: boolean;
+  lastTestedAt: string | null;
+  lastSentAt: string | null;
+}
+
 let kecamatanCache: CacheEntry<KecamatanRaw[]> | null = null;
 let listingsCache: CacheEntry<ListingItem[]> | null = null;
 let lastRefreshAt: string | null = null;
@@ -60,6 +75,7 @@ const prevListingUnits = new Map<string, { namaPerumahan: string; namaDeveloper:
 const DATA_DIR = join(process.cwd(), "data");
 const CACHE_FILE = join(DATA_DIR, "lumajang-listings.json");
 const EVENTS_FILE = join(DATA_DIR, "lumajang-sale-events.json");
+const NOTIFICATIONS_FILE = join(DATA_DIR, "notifications-config.json");
 
 function loadPersistedData(): void {
   try {
@@ -76,6 +92,7 @@ function loadPersistedData(): void {
       const raw = JSON.parse(readFileSync(EVENTS_FILE, "utf-8"));
       if (Array.isArray(raw.events)) {
         saleEvents = raw.events;
+        if (Array.isArray(raw.snapshots)) salesSnapshots = raw.snapshots;
         logger.info({ count: saleEvents.length }, "Loaded persisted sale events");
       }
     }
@@ -94,9 +111,110 @@ function persistData(): void {
         lastRefreshAt,
       }));
     }
-    writeFileSync(EVENTS_FILE, JSON.stringify({ events: saleEvents }));
+    writeFileSync(EVENTS_FILE, JSON.stringify({ events: saleEvents, snapshots: salesSnapshots }));
   } catch (err) {
     logger.error({ err }, "Failed to persist data");
+  }
+}
+
+function loadNotificationConfig(): NotificationConfig {
+  const defaults: NotificationConfig = {
+    webhookUrl: "",
+    webhookEnabled: false,
+    emailEnabled: false,
+    emailSmtp: "",
+    emailPort: 587,
+    emailUser: "",
+    emailPass: "",
+    emailTo: "",
+    notifyOnSale: true,
+    notifyOnRefreshComplete: false,
+    lastTestedAt: null,
+    lastSentAt: null,
+  };
+  try {
+    if (existsSync(NOTIFICATIONS_FILE)) {
+      return { ...defaults, ...JSON.parse(readFileSync(NOTIFICATIONS_FILE, "utf-8")) };
+    }
+  } catch {
+    /* ignore */
+  }
+  return defaults;
+}
+
+function saveNotificationConfig(cfg: NotificationConfig): void {
+  try {
+    if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+    writeFileSync(NOTIFICATIONS_FILE, JSON.stringify(cfg, null, 2));
+  } catch (err) {
+    logger.error({ err }, "Failed to save notification config");
+  }
+}
+
+async function sendWebhookNotification(cfg: NotificationConfig, payload: object): Promise<boolean> {
+  if (!cfg.webhookEnabled || !cfg.webhookUrl) return false;
+  try {
+    const res = await fetch(cfg.webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10000),
+    });
+    return res.ok;
+  } catch (err) {
+    logger.error({ err }, "Webhook notification failed");
+    return false;
+  }
+}
+
+async function sendEmailNotification(cfg: NotificationConfig, subject: string, text: string): Promise<boolean> {
+  if (!cfg.emailEnabled || !cfg.emailSmtp || !cfg.emailTo) return false;
+  try {
+    const nodemailer = await import("nodemailer");
+    const transporter = nodemailer.default.createTransport({
+      host: cfg.emailSmtp,
+      port: cfg.emailPort,
+      secure: cfg.emailPort === 465,
+      auth: cfg.emailUser ? { user: cfg.emailUser, pass: cfg.emailPass } : undefined,
+    });
+    await transporter.sendMail({
+      from: cfg.emailUser || "dashboard@lumajang.local",
+      to: cfg.emailTo,
+      subject,
+      text,
+    });
+    return true;
+  } catch (err) {
+    logger.error({ err }, "Email notification failed");
+    return false;
+  }
+}
+
+async function triggerSaleNotification(event: SaleEvent): Promise<void> {
+  const cfg = loadNotificationConfig();
+  if (!cfg.notifyOnSale) return;
+
+  const lines = event.listingChanges.map(
+    (c) => `- ${c.namaPerumahan} (${c.kecamatan}): ${c.unitLaku} unit terjual`
+  );
+  const text = `🏠 Penjualan Baru Terdeteksi — ${new Date(event.recordedAt).toLocaleString("id-ID")}\n\nTotal: ${event.totalLaku} unit\n\n${lines.join("\n")}`;
+
+  const payload = {
+    event: "sale_detected",
+    recordedAt: event.recordedAt,
+    totalLaku: event.totalLaku,
+    changes: event.listingChanges,
+    text,
+  };
+
+  const [wok, eok] = await Promise.allSettled([
+    sendWebhookNotification(cfg, payload),
+    sendEmailNotification(cfg, `[Dashboard Lumajang] ${event.totalLaku} Unit Terjual`, text),
+  ]);
+
+  if (wok.status === "fulfilled" && wok.value || eok.status === "fulfilled" && eok.value) {
+    const updated = { ...cfg, lastSentAt: new Date().toISOString() };
+    saveNotificationConfig(updated);
   }
 }
 
@@ -310,8 +428,8 @@ function recordSalesSnapshot(listings: ListingItem[]): void {
     salesSnapshots[existingIdx] = snapshot;
   } else {
     salesSnapshots.push(snapshot);
-    if (salesSnapshots.length > 12) {
-      salesSnapshots = salesSnapshots.slice(-12);
+    if (salesSnapshots.length > 24) {
+      salesSnapshots = salesSnapshots.slice(-24);
     }
   }
 }
@@ -364,6 +482,8 @@ function detectListingSaleEvents(): void {
   if (saleEvents.length > 500) saleEvents = saleEvents.slice(0, 500);
   persistData();
   logger.info({ totalLaku: event.totalLaku, perumahanTerdampak: changes.length }, "Listing sale events recorded");
+
+  triggerSaleNotification(event).catch((err) => logger.error({ err }, "Failed to send sale notification"));
 }
 
 async function runFullScrape(): Promise<ListingItem[]> {
@@ -372,7 +492,6 @@ async function runFullScrape(): Promise<ListingItem[]> {
 
   scraping = { inProgress: true, pagesScraped: 0, totalPages: 0, enriching: false, enriched: 0, toEnrich: 0 };
 
-  // Early-stop: hentikan jika sudah N batch berturut-turut tanpa listing Lumajang
   const MAX_EMPTY_BATCHES = 5;
   let consecutiveEmptyBatches = 0;
 
@@ -419,8 +538,6 @@ async function runFullScrape(): Promise<ListingItem[]> {
       scraping.pagesScraped = Math.min(start + CONCURRENT_PAGES - 2, maxPage);
       listingsCache = { data: [...results], fetchedAt: Date.now() };
 
-      // Early stop — jika sudah terlalu banyak batch kosong berturut-turut,
-      // kemungkinan sudah tidak ada lagi listing Lumajang di sisa halaman
       if (consecutiveEmptyBatches >= MAX_EMPTY_BATCHES) {
         logger.info(
           { pagesScraped: scraping.pagesScraped, totalFound: results.length, stoppedEarly: true },
@@ -456,15 +573,43 @@ async function fetchKecamatanData(): Promise<KecamatanRaw[]> {
   if (kecamatanCache && Date.now() - kecamatanCache.fetchedAt < CACHE_TTL_MS) {
     return kecamatanCache.data;
   }
-  const res = await fetch(
-    `${SIKUMBANG_BASE}/grafik-data?kode=${LUMAJANG_KODE}&asosiasi=`,
-    { signal: AbortSignal.timeout(15000) }
-  );
-  if (!res.ok) throw new Error(`Grafik data fetch failed: ${res.status}`);
-  const json = (await res.json()) as { data: KecamatanRaw[] };
-  const data = json.data ?? [];
-  kecamatanCache = { data, fetchedAt: Date.now() };
-  return data;
+  try {
+    const res = await fetch(
+      `${SIKUMBANG_BASE}/grafik-data?kode=${LUMAJANG_KODE}&asosiasi=`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (!res.ok) throw new Error(`Grafik data fetch failed: ${res.status}`);
+    const json = (await res.json()) as { data: KecamatanRaw[] };
+    const data = json.data ?? [];
+    kecamatanCache = { data, fetchedAt: Date.now() };
+    return data;
+  } catch (err) {
+    if (kecamatanCache) {
+      logger.warn({ err }, "fetchKecamatanData failed, using stale cache");
+      return kecamatanCache.data;
+    }
+    logger.warn({ err }, "fetchKecamatanData failed, computing from listings cache");
+    return computeKecamatanFromListings();
+  }
+}
+
+function computeKecamatanFromListings(): KecamatanRaw[] {
+  const listings = getCachedListings();
+  const kecMap = new Map<string, { kodeWilayah: string; namaWilayah: string; supply: number; pilihan: number; peminatan: number }>();
+  for (const l of listings) {
+    const key = (l.kecamatan ?? "").toUpperCase();
+    if (!key) continue;
+    const existing = kecMap.get(key);
+    const unit = parseInt(l.jumlahUnit ?? "0", 10) || 0;
+    const dipilih = parseInt(l.jumlahDipilih ?? "0", 10) || 0;
+    if (existing) {
+      existing.supply += unit;
+      existing.pilihan += dipilih;
+    } else {
+      kecMap.set(key, { kodeWilayah: key, namaWilayah: `KEC. ${key}`, supply: unit, pilihan: dipilih, peminatan: 0 });
+    }
+  }
+  return [...kecMap.values()];
 }
 
 function ensureScraping(): void {
@@ -649,18 +794,12 @@ router.get("/lumajang/penjualan-bulanan", async (req, res) => {
     }
 
     const prevSnapshot = salesSnapshots.find((s) => s.month < currentMonth);
-    const currentSnapshotIdx = salesSnapshots.findIndex((s) => s.month === currentMonth);
-
     const developersArray = Object.values(developerSales)
       .filter((d) => d.totalUnit > 0)
       .map((dev) => {
         const prevUnit = prevSnapshot?.developerSales?.[dev.namaDeveloper]?.totalUnit ?? null;
         const deltaBulanIni = prevUnit !== null ? dev.totalUnit - prevUnit : null;
-        return {
-          ...dev,
-          unitBulanLalu: prevUnit,
-          deltaBulanIni,
-        };
+        return { ...dev, unitBulanLalu: prevUnit, deltaBulanIni };
       })
       .sort((a, b) => b.totalUnit - a.totalUnit);
 
@@ -688,6 +827,297 @@ router.get("/lumajang/sale-events", (_req, res) => {
     totalLaku: saleEvents.reduce((s, e) => s + e.totalLaku, 0),
     count: saleEvents.length,
   });
+});
+
+router.get("/lumajang/analytics", async (req, res) => {
+  try {
+    ensureScraping();
+    const listings = getCachedListings();
+    let kecamatanData: KecamatanRaw[] = [];
+    try { kecamatanData = await fetchKecamatanData(); } catch { /* use empty */ }
+
+    const kecMap: Record<string, { supply: number; pilihan: number; peminatan: number }> = {};
+    for (const k of kecamatanData) {
+      kecMap[k.namaWilayah?.toUpperCase()] = { supply: k.supply || 0, pilihan: k.pilihan || 0, peminatan: k.peminatan || 0 };
+    }
+
+    const totalSupply = kecamatanData.reduce((s, k) => s + (k.supply || 0), 0);
+    const totalPilihan = kecamatanData.reduce((s, k) => s + (k.pilihan || 0), 0);
+    const totalSisa = Math.max(0, totalSupply - totalPilihan);
+    const totalSaleEvents = saleEvents.reduce((s, e) => s + e.totalLaku, 0);
+
+    const perumahan = listings
+      .map((l) => {
+        const unit = parseInt(l.jumlahUnit ?? "0", 10) || 0;
+        const kec = kecMap[l.kecamatan?.toUpperCase()] ?? { supply: 0, pilihan: 0, peminatan: 0 };
+        const estTerjual = kec.supply > 0 ? Math.round((unit / kec.supply) * kec.pilihan) : 0;
+        const estSisa = Math.max(0, unit - estTerjual);
+        const pctTerjual = unit > 0 ? (estTerjual / unit) * 100 : 0;
+        return { ...l, unit, estTerjual, estSisa, pctTerjual };
+      })
+      .filter((l) => l.unit > 0);
+
+    const totalEstTerjual = perumahan.reduce((s, l) => s + l.estTerjual, 0);
+
+    const perumahanChart = [...perumahan]
+      .sort((a, b) => b.estTerjual - a.estTerjual)
+      .slice(0, 20)
+      .map((l) => ({
+        idLokasi: l.idLokasi,
+        namaPerumahan: l.namaPerumahan,
+        namaDeveloper: l.namaDeveloper,
+        kecamatan: l.kecamatan,
+        totalUnit: l.unit,
+        estTerjual: l.estTerjual,
+        estSisa: l.estSisa,
+        pctTerjual: Math.round(l.pctTerjual * 10) / 10,
+        pctKabupaten: totalEstTerjual > 0 ? Math.round((l.estTerjual / totalEstTerjual) * 1000) / 10 : 0,
+      }));
+
+    const devMap = new Map<string, { namaDeveloper: string; asosiasi: string; totalUnit: number; estTerjual: number; jumlahLokasi: number }>();
+    for (const l of perumahan) {
+      const prev = devMap.get(l.namaDeveloper);
+      if (prev) {
+        prev.totalUnit += l.unit;
+        prev.estTerjual += l.estTerjual;
+        prev.jumlahLokasi++;
+      } else {
+        devMap.set(l.namaDeveloper, { namaDeveloper: l.namaDeveloper, asosiasi: l.asosiasi, totalUnit: l.unit, estTerjual: l.estTerjual, jumlahLokasi: 1 });
+      }
+    }
+    const developerChart = [...devMap.values()]
+      .sort((a, b) => b.estTerjual - a.estTerjual)
+      .slice(0, 15)
+      .map((d) => ({
+        ...d,
+        pctKabupaten: totalEstTerjual > 0 ? Math.round((d.estTerjual / totalEstTerjual) * 1000) / 10 : 0,
+        pctTerjual: d.totalUnit > 0 ? Math.round((d.estTerjual / d.totalUnit) * 1000) / 10 : 0,
+      }));
+
+    const kecChart = kecamatanData
+      .filter((k) => k.supply > 0)
+      .sort((a, b) => (b.pilihan || 0) - (a.pilihan || 0))
+      .map((k) => ({
+        nama: k.namaWilayah.replace(/^KEC\.?\s*/i, ""),
+        supply: k.supply || 0,
+        pilihan: k.pilihan || 0,
+        peminatan: k.peminatan || 0,
+        sisa: Math.max(0, (k.supply || 0) - (k.pilihan || 0)),
+        pctTerjual: k.supply > 0 ? Math.round(((k.pilihan || 0) / k.supply) * 1000) / 10 : 0,
+        pctKabupaten: totalPilihan > 0 ? Math.round(((k.pilihan || 0) / totalPilihan) * 1000) / 10 : 0,
+      }));
+
+    const saleEventsByDate = new Map<string, number>();
+    for (const ev of saleEvents) {
+      const d = ev.recordedAt.slice(0, 10);
+      saleEventsByDate.set(d, (saleEventsByDate.get(d) ?? 0) + ev.totalLaku);
+    }
+    const saleTimeline = [...saleEventsByDate.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-30)
+      .map(([date, units]) => ({ date, units }));
+
+    res.json({
+      summary: {
+        totalSupply,
+        totalPilihan,
+        totalSisa,
+        totalSaleEvents,
+        totalPerumahan: perumahan.length,
+        totalEstTerjual,
+        pctTerjual: totalSupply > 0 ? Math.round((totalPilihan / totalSupply) * 1000) / 10 : 0,
+      },
+      perumahanChart,
+      developerChart,
+      kecamatanChart: kecChart,
+      saleTimeline,
+      snapshots: salesSnapshots.map((s) => ({
+        month: s.month,
+        totalUnit: Object.values(s.developerSales).reduce((sum, d) => sum + d.totalUnit, 0),
+      })),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get analytics");
+    res.status(500).json({ error: "Gagal mengambil data analytics" });
+  }
+});
+
+router.get("/lumajang/export", async (req, res) => {
+  try {
+    ensureScraping();
+    const listings = getCachedListings();
+    let kecamatanData: KecamatanRaw[] = [];
+    try { kecamatanData = await fetchKecamatanData(); } catch { /* use empty */ }
+
+    const kecMap: Record<string, { supply: number; pilihan: number }> = {};
+    for (const k of kecamatanData) {
+      kecMap[k.namaWilayah?.toUpperCase()] = { supply: k.supply || 0, pilihan: k.pilihan || 0 };
+    }
+
+    const rows = listings.map((l) => {
+      const unit = parseInt(l.jumlahUnit ?? "0", 10) || 0;
+      const kec = kecMap[l.kecamatan?.toUpperCase()] ?? { supply: 0, pilihan: 0 };
+      const estTerjual = kec.supply > 0 ? Math.round((unit / kec.supply) * kec.pilihan) : 0;
+      const estSisa = Math.max(0, unit - estTerjual);
+      return {
+        idLokasi: l.idLokasi,
+        namaPerumahan: l.namaPerumahan,
+        jenisPerumahan: l.jenisPerumahan,
+        kecamatan: l.kecamatan,
+        kelurahan: l.kelurahan ?? "",
+        namaDeveloper: l.namaDeveloper,
+        asosiasi: l.asosiasi,
+        totalUnit: unit,
+        estTerjual,
+        estSisa,
+        pctTerjual: unit > 0 ? Math.round((estTerjual / unit) * 1000) / 10 : 0,
+        koordinatLat: l.koordinat ? l.koordinat[1] : "",
+        koordinatLng: l.koordinat ? l.koordinat[0] : "",
+        fotoUrl: (l.foto ?? []).join("; "),
+      };
+    });
+
+    const saleEventsFlat = saleEvents.flatMap((ev) =>
+      ev.listingChanges.map((c) => ({
+        eventId: ev.id,
+        recordedAt: ev.recordedAt,
+        idLokasi: c.idLokasi,
+        namaPerumahan: c.namaPerumahan,
+        namaDeveloper: c.namaDeveloper,
+        kecamatan: c.kecamatan,
+        unitLaku: c.unitLaku,
+        unitSebelum: c.unitSebelum,
+        unitSesudah: c.unitSesudah,
+      }))
+    );
+
+    res.json({
+      exportedAt: new Date().toISOString(),
+      listings: rows,
+      saleEvents: saleEventsFlat,
+      kecamatan: kecamatanData.map((k) => ({
+        namaWilayah: k.namaWilayah,
+        supply: k.supply || 0,
+        pilihan: k.pilihan || 0,
+        peminatan: k.peminatan || 0,
+        sisa: Math.max(0, (k.supply || 0) - (k.pilihan || 0)),
+      })),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to export data");
+    res.status(500).json({ error: "Gagal export data" });
+  }
+});
+
+router.post("/lumajang/import", async (req, res) => {
+  try {
+    const { listings: importedListings } = req.body as { listings?: Partial<ListingItem>[] };
+    if (!Array.isArray(importedListings)) {
+      return res.status(400).json({ error: "Format tidak valid — diperlukan array listings" });
+    }
+
+    const current = getCachedListings();
+    const currentMap = new Map(current.map((l) => [l.idLokasi, l]));
+
+    let updated = 0;
+    let added = 0;
+
+    for (const imp of importedListings) {
+      if (!imp.idLokasi) continue;
+      const existing = currentMap.get(imp.idLokasi);
+      if (existing) {
+        if (imp.jumlahUnit) existing.jumlahUnit = imp.jumlahUnit;
+        if (imp.koordinat) existing.koordinat = imp.koordinat;
+        updated++;
+      } else {
+        current.push({
+          idLokasi: imp.idLokasi,
+          namaPerumahan: imp.namaPerumahan ?? "",
+          jenisPerumahan: imp.jenisPerumahan ?? "",
+          kecamatan: imp.kecamatan ?? "",
+          kelurahan: imp.kelurahan ?? null,
+          namaDeveloper: imp.namaDeveloper ?? "",
+          asosiasi: imp.asosiasi ?? "",
+          jumlahUnit: imp.jumlahUnit ?? null,
+          foto: imp.foto ?? [],
+          koordinat: imp.koordinat ?? null,
+        });
+        added++;
+      }
+    }
+
+    if (listingsCache) {
+      listingsCache = { data: current, fetchedAt: listingsCache.fetchedAt };
+    } else {
+      listingsCache = { data: current, fetchedAt: Date.now() };
+    }
+
+    persistData();
+    res.json({ success: true, updated, added, total: current.length });
+  } catch (err) {
+    req.log.error({ err }, "Failed to import data");
+    res.status(500).json({ error: "Gagal import data" });
+  }
+});
+
+router.get("/lumajang/notifications", (_req, res) => {
+  const cfg = loadNotificationConfig();
+  res.json({ ...cfg, emailPass: cfg.emailPass ? "****" : "" });
+});
+
+router.post("/lumajang/notifications", (req, res) => {
+  try {
+    const existing = loadNotificationConfig();
+    const body = req.body as Partial<NotificationConfig>;
+    const updated: NotificationConfig = {
+      ...existing,
+      webhookUrl: body.webhookUrl ?? existing.webhookUrl,
+      webhookEnabled: body.webhookEnabled ?? existing.webhookEnabled,
+      emailEnabled: body.emailEnabled ?? existing.emailEnabled,
+      emailSmtp: body.emailSmtp ?? existing.emailSmtp,
+      emailPort: body.emailPort ?? existing.emailPort,
+      emailUser: body.emailUser ?? existing.emailUser,
+      emailPass: body.emailPass && body.emailPass !== "****" ? body.emailPass : existing.emailPass,
+      emailTo: body.emailTo ?? existing.emailTo,
+      notifyOnSale: body.notifyOnSale ?? existing.notifyOnSale,
+      notifyOnRefreshComplete: body.notifyOnRefreshComplete ?? existing.notifyOnRefreshComplete,
+      lastTestedAt: existing.lastTestedAt,
+      lastSentAt: existing.lastSentAt,
+    };
+    saveNotificationConfig(updated);
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to save notification config");
+    res.status(500).json({ error: "Gagal menyimpan konfigurasi" });
+  }
+});
+
+router.post("/lumajang/notifications/test", async (req, res) => {
+  try {
+    const cfg = loadNotificationConfig();
+    const payload = {
+      event: "test",
+      message: "Ini adalah pesan test dari Dashboard Perumahan Lumajang",
+      timestamp: new Date().toISOString(),
+    };
+
+    const results: { webhook?: boolean; email?: boolean } = {};
+
+    if (cfg.webhookEnabled && cfg.webhookUrl) {
+      results.webhook = await sendWebhookNotification(cfg, payload);
+    }
+    if (cfg.emailEnabled && cfg.emailSmtp && cfg.emailTo) {
+      results.email = await sendEmailNotification(cfg, "[Test] Dashboard Perumahan Lumajang", payload.message);
+    }
+
+    const updated = { ...cfg, lastTestedAt: new Date().toISOString() };
+    saveNotificationConfig(updated);
+
+    res.json({ success: true, results });
+  } catch (err) {
+    req.log.error({ err }, "Failed to test notification");
+    res.status(500).json({ error: "Gagal kirim test notifikasi" });
+  }
 });
 
 router.get("/lumajang/photo-proxy", async (req: Request, res: Response) => {

@@ -9,11 +9,11 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, PieChart, Pie, Cell,
+  ResponsiveContainer, PieChart, Pie, Cell, LabelList,
 } from "recharts";
 import {
   Building, MapPin, Package, Loader2, Activity,
-  ChevronDown, ChevronRight, Search, TrendingDown,
+  ChevronDown, ChevronRight, Search, TrendingDown, TrendingUp,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -309,21 +309,21 @@ function StokModal({ open, onClose, summary }: {
           {summary && (
             <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-5">
               <div className="rounded-lg border p-3 sm:p-4 text-center">
-                <div className="text-lg sm:text-2xl font-bold text-blue-600">{summary.totalStok.toLocaleString()}</div>
+                <div className="text-lg sm:text-2xl font-bold text-blue-600">{(summary.totalStok ?? 0).toLocaleString()}</div>
                 <div className="text-xs sm:text-sm text-muted-foreground mt-1">Total Stok</div>
               </div>
               <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 sm:p-4 text-center">
-                <div className="text-lg sm:text-2xl font-bold text-yellow-600">{summary.totalDipilih.toLocaleString()}</div>
+                <div className="text-lg sm:text-2xl font-bold text-yellow-600">{(summary.totalDipilih ?? 0).toLocaleString()}</div>
                 <div className="text-xs sm:text-sm text-muted-foreground mt-1">Dipilih</div>
                 <div className="text-xs text-yellow-600 mt-0.5">
-                  {summary.totalStok > 0 ? ((summary.totalDipilih / summary.totalStok) * 100).toFixed(1) : 0}%
+                  {(summary.totalStok ?? 0) > 0 ? (((summary.totalDipilih ?? 0) / (summary.totalStok ?? 1)) * 100).toFixed(1) : 0}%
                 </div>
               </div>
               <div className="rounded-lg border border-green-200 bg-green-50 p-3 sm:p-4 text-center">
-                <div className="text-lg sm:text-2xl font-bold text-green-600">{summary.totalSisa.toLocaleString()}</div>
+                <div className="text-lg sm:text-2xl font-bold text-green-600">{(summary.totalSisa ?? 0).toLocaleString()}</div>
                 <div className="text-xs sm:text-sm text-muted-foreground mt-1">Sisa</div>
                 <div className="text-xs text-green-600 mt-0.5">
-                  {summary.totalStok > 0 ? ((summary.totalSisa / summary.totalStok) * 100).toFixed(1) : 0}%
+                  {(summary.totalStok ?? 0) > 0 ? (((summary.totalSisa ?? 0) / (summary.totalStok ?? 1)) * 100).toFixed(1) : 0}%
                 </div>
               </div>
             </div>
@@ -400,14 +400,13 @@ function StokModal({ open, onClose, summary }: {
 }
 
 function ClickableStatCard({
-  title, value, icon: Icon, description, onClick, color = "blue",
+  title, value, icon: Icon, description, onClick,
 }: {
   title: string;
   value: string | number;
   icon: React.ElementType;
   description?: string;
   onClick: () => void;
-  color?: "blue";
 }) {
   return (
     <Card
@@ -427,21 +426,58 @@ function ClickableStatCard({
   );
 }
 
-const CHART_COLORS = ["#3b82f6", "#eab308", "#22c55e", "#f97316", "#8b5cf6"];
+const CHART_COLORS = ["#3b82f6", "#eab308", "#22c55e", "#f97316", "#8b5cf6", "#ec4899", "#14b8a6", "#f43f5e"];
+
+interface PerumahanSalesRow {
+  name: string;
+  fullName: string;
+  developer: string;
+  kecamatan: string;
+  totalUnit: number;
+  estTerjual: number;
+  estSisa: number;
+  pctKabupaten: number;
+}
+
+const DEMO_SALE_EVENTS: SaleEventItem[] = [
+  {
+    id: "demo-1",
+    recordedAt: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
+    totalLaku: 8,
+    listingChanges: [
+      { idLokasi: "LMJ001", namaPerumahan: "Griya Lumajang Permai", namaDeveloper: "PT. Mitra Properti", kecamatan: "SUKODONO", unitLaku: 5, unitSebelum: 120, unitSesudah: 115 },
+      { idLokasi: "LMJ002", namaPerumahan: "Perumnas Tempeh Indah", namaDeveloper: "PT. Griya Indah", kecamatan: "TEMPEH", unitLaku: 3, unitSebelum: 80, unitSesudah: 77 },
+    ],
+  },
+  {
+    id: "demo-2",
+    recordedAt: new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString(),
+    totalLaku: 4,
+    listingChanges: [
+      { idLokasi: "LMJ003", namaPerumahan: "Cluster Klakah Asri", namaDeveloper: "PT. Bangun Sejahtera", kecamatan: "KLAKAH", unitLaku: 4, unitSebelum: 60, unitSesudah: 56 },
+    ],
+  },
+];
 
 export default function Dashboard() {
   const [openModal, setOpenModal] = useState<"lokasi" | "developer" | "stok" | null>(null);
 
-  const { data: summary, isLoading: isSummaryLoading } = useGetLumajangSummary({}, {
+  const { data: summary, isLoading: isSummaryLoading } = useGetLumajangSummary({
     query: {
       refetchInterval: (query) => {
         const data = query.state.data;
         return data?.scraping?.inProgress ? 3000 : false;
       },
+      placeholderData: (prev) => prev,
     },
   });
-  const { data: kecamatan, isLoading: isKecamatanLoading } = useGetLumajangKecamatan();
-  const { data: allListingsResp } = useGetLumajangListings({ page: 1, limit: 500 });
+  const { data: kecamatan, isLoading: isKecamatanLoading } = useGetLumajangKecamatan({
+    query: { placeholderData: (prev) => prev },
+  });
+  const { data: allListingsResp } = useGetLumajangListings(
+    { page: 1, limit: 500 },
+    { query: { placeholderData: (prev: typeof allListingsResp) => prev } }
+  );
   const allListings = (allListingsResp?.data ?? []) as RawListing[];
 
   const { data: saleEventsData } = useQuery<{ events: SaleEventItem[]; totalLaku: number; count: number }>({
@@ -452,66 +488,84 @@ export default function Dashboard() {
       return res.json();
     },
     refetchInterval: 60000,
+    placeholderData: (prev) => prev,
   });
   const saleEvents = saleEventsData?.events ?? [];
 
-  const isLoading = isSummaryLoading || isKecamatanLoading;
+  const isLoading = isSummaryLoading && !summary;
+  const isKecLoading = isKecamatanLoading && !kecamatan;
   const isScrapingInProgress = summary?.scraping?.inProgress ?? false;
   const scrapingPct = summary?.scraping?.totalPages
     ? Math.round((summary.scraping.pagesScraped / summary.scraping.totalPages) * 100)
     : 0;
 
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const kecMap: Record<string, { supply: number; pilihan: number }> = {};
+  for (const k of kecamatan ?? []) {
+    kecMap[k.namaWilayah?.toUpperCase()] = { supply: k.supply, pilihan: k.pilihan };
+  }
 
-  const topPerumahanBySales = useMemo(() => {
-    const map = new Map<string, { name: string; fullName: string; developer: string; total: number }>();
-    for (const ev of saleEvents) {
+  const perumahanSalesData = useMemo((): PerumahanSalesRow[] => {
+    if (allListings.length === 0 || Object.keys(kecMap).length === 0) return [];
+
+    const rows = allListings
+      .map((l) => {
+        const unit = parseInt(l.jumlahUnit ?? "0", 10) || 0;
+        const kec = kecMap[l.kecamatan?.toUpperCase()] ?? { supply: 0, pilihan: 0 };
+        const estTerjual = kec.supply > 0 ? Math.round((unit / kec.supply) * kec.pilihan) : 0;
+        const estSisa = Math.max(0, unit - estTerjual);
+        return { l, unit, estTerjual, estSisa };
+      })
+      .filter((r) => r.unit > 0);
+
+    const totalEstTerjual = rows.reduce((s, r) => s + r.estTerjual, 0);
+
+    return rows
+      .sort((a, b) => b.estTerjual - a.estTerjual)
+      .slice(0, 15)
+      .map((r) => ({
+        name: r.l.namaPerumahan.length > 22 ? r.l.namaPerumahan.slice(0, 22) + "…" : r.l.namaPerumahan,
+        fullName: r.l.namaPerumahan,
+        developer: r.l.namaDeveloper,
+        kecamatan: r.l.kecamatan,
+        totalUnit: r.unit,
+        estTerjual: r.estTerjual,
+        estSisa: r.estSisa,
+        pctKabupaten: totalEstTerjual > 0 ? Math.round((r.estTerjual / totalEstTerjual) * 1000) / 10 : 0,
+      }));
+  }, [allListings, kecamatan]);
+
+  const saleEventsChartData = useMemo(() => {
+    const eventsToUse = saleEvents.length > 0 ? saleEvents : DEMO_SALE_EVENTS;
+    const isDemoMode = saleEvents.length === 0;
+
+    const byPerumahan = new Map<string, { name: string; fullName: string; developer: string; unitLaku: number; recordedAt: string }>();
+    for (const ev of eventsToUse.slice(0, 20)) {
       for (const c of ev.listingChanges) {
-        const prev = map.get(c.idLokasi);
+        const prev = byPerumahan.get(c.idLokasi);
         if (prev) {
-          prev.total += c.unitLaku;
+          prev.unitLaku += c.unitLaku;
         } else {
-          map.set(c.idLokasi, {
+          byPerumahan.set(c.idLokasi, {
             name: c.namaPerumahan.length > 20 ? c.namaPerumahan.slice(0, 20) + "…" : c.namaPerumahan,
             fullName: c.namaPerumahan,
             developer: c.namaDeveloper,
-            total: c.unitLaku,
+            unitLaku: c.unitLaku,
+            recordedAt: ev.recordedAt,
           });
         }
       }
     }
-    return [...map.values()]
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 10)
-      .map((p) => ({ name: p.name, fullName: p.fullName, developer: p.developer, "Unit Terjual": p.total }));
+
+    return {
+      data: [...byPerumahan.values()]
+        .sort((a, b) => b.unitLaku - a.unitLaku)
+        .slice(0, 10)
+        .map((r) => ({ name: r.name, fullName: r.fullName, developer: r.developer, "Unit Terjual": r.unitLaku })),
+      isDemoMode,
+    };
   }, [saleEvents]);
 
-  const { topDeveloperData, developerPeriodLabel } = useMemo(() => {
-    const buildMap = (evs: typeof saleEvents) => {
-      const m = new Map<string, number>();
-      for (const ev of evs) {
-        for (const c of ev.listingChanges) {
-          m.set(c.namaDeveloper, (m.get(c.namaDeveloper) ?? 0) + c.unitLaku);
-        }
-      }
-      return m;
-    };
-    const thisMonthEvs = saleEvents.filter((e) => e.recordedAt.startsWith(currentMonth));
-    const useAllTime = thisMonthEvs.length === 0;
-    const map = buildMap(useAllTime ? saleEvents : thisMonthEvs);
-    const label = useAllTime ? "Sepanjang Waktu" : `Bulan ${new Date().toLocaleDateString("id-ID", { month: "long", year: "numeric" })}`;
-    const data = [...map.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([name, total]) => ({
-        name: name.length > 18 ? name.slice(0, 18) + "…" : name,
-        fullName: name,
-        "Unit Terjual": total,
-      }));
-    return { topDeveloperData: data, developerPeriodLabel: label };
-  }, [saleEvents, currentMonth]);
-
-  if (isLoading) {
+  if (isLoading || isKecLoading) {
     return (
       <div className="space-y-6 p-1">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -560,13 +614,13 @@ export default function Dashboard() {
               <Loader2 className="h-5 w-5 text-blue-600 animate-spin mt-0.5 shrink-0" />
               <div className="flex-1 space-y-2 min-w-0">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium text-blue-800 truncate">Mengambil data dari SIKUMBANG Tapera...</p>
+                  <p className="text-sm font-medium text-blue-800 truncate">Mengambil data terbaru dari SIKUMBANG Tapera (background)...</p>
                   <span className="text-sm font-bold text-blue-700 shrink-0">{scrapingPct}%</span>
                 </div>
                 <Progress value={scrapingPct} className="h-2" />
                 <p className="text-xs text-blue-600">
                   {summary.scraping.pagesScraped.toLocaleString()} dari {summary.scraping.totalPages.toLocaleString()} halaman
-                  — {summary.totalLokasi} lokasi Lumajang
+                  — {summary.totalLokasi} lokasi ditemukan · Data lama masih aktif selama proses berlangsung
                 </p>
               </div>
             </div>
@@ -591,9 +645,9 @@ export default function Dashboard() {
         />
         <ClickableStatCard
           title="Total Stok"
-          value={summary.totalStok.toLocaleString()}
+          value={(summary.totalStok ?? 0).toLocaleString()}
           icon={Package}
-          description={`${summary.totalDipilih.toLocaleString()} dipilih · ${summary.totalSisa.toLocaleString()} tersedia`}
+          description={`${(summary.totalDipilih ?? 0).toLocaleString()} dipilih · ${(summary.totalSisa ?? 0).toLocaleString()} tersedia`}
           onClick={() => setOpenModal("stok")}
         />
       </div>
@@ -664,7 +718,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm sm:text-base flex items-center gap-2">
               <TrendingDown className="h-4 w-4 text-green-600" />
-              Penjualan Realtime
+              Aktivitas Penjualan Terbaru
             </CardTitle>
             {saleEventsData && saleEventsData.count > 0 && (
               <Badge variant="secondary" className="text-xs">
@@ -718,79 +772,116 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-              <TrendingDown className="h-4 w-4 text-green-600" />
-              Total Penjualan Terbanyak — per Perumahan
+              <TrendingUp className="h-4 w-4 text-blue-600" />
+              Grafik 1 — Unit Terjual per Perumahan (Top 15)
             </CardTitle>
-            <p className="text-xs text-muted-foreground">Akumulasi unit terjual sejak monitoring aktif</p>
+            <p className="text-xs text-muted-foreground">
+              Estimasi unit terjual (total unit × rasio dipilih/supply kecamatan) + % serapan kabupaten
+            </p>
           </CardHeader>
           <CardContent className="px-2 sm:px-4">
-            {topPerumahanBySales.length === 0 ? (
-              <div className="flex items-center justify-center h-40 text-center">
+            {perumahanSalesData.length === 0 ? (
+              <div className="flex items-center justify-center h-48 text-center">
                 <div>
                   <Activity className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Belum ada data penjualan</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Refresh data minimal 2x untuk mulai mendeteksi</p>
+                  <p className="text-sm text-muted-foreground">Menunggu data listing...</p>
+                  <p className="text-xs text-muted-foreground mt-1">Proses scraping berlangsung di background</p>
                 </div>
               </div>
             ) : (
-              <div className="h-[280px]">
+              <div className="h-[360px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
-                    data={topPerumahanBySales}
+                    data={perumahanSalesData}
                     layout="vertical"
-                    margin={{ top: 4, right: 24, left: 4, bottom: 4 }}
+                    margin={{ top: 4, right: 60, left: 4, bottom: 4 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
-                    <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={108} />
+                    <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={112} />
                     <Tooltip
-                      formatter={(v: number) => [`${v} unit`, "Terjual"]}
-                      labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName ?? ""}
+                      formatter={(v: number, name: string) => [
+                        name === "estTerjual" ? `${v} unit terjual` : `${v} unit sisa`,
+                        name === "estTerjual" ? "Est. Terjual" : "Sisa",
+                      ]}
+                      labelFormatter={(_, payload) => {
+                        const p = payload?.[0]?.payload as PerumahanSalesRow | undefined;
+                        return p ? `${p.fullName}\n${p.kecamatan} • ${p.pctKabupaten}% serapan kab.` : "";
+                      }}
                     />
-                    <Bar dataKey="Unit Terjual" fill="#22c55e" radius={[0, 3, 3, 0]} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="estTerjual" name="Est. Terjual" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]}>
+                      <LabelList
+                        dataKey="pctKabupaten"
+                        position="right"
+                        formatter={(v: number) => `${v}%`}
+                        style={{ fontSize: 9, fill: "#6b7280" }}
+                      />
+                    </Bar>
+                    <Bar dataKey="estSisa" name="Sisa" stackId="a" fill="#e5e7eb" radius={[0, 3, 3, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             )}
+            <p className="text-xs text-muted-foreground mt-2 italic">
+              * Label kanan = % serapan dari total penjualan Kab. Lumajang
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-              <Building className="h-4 w-4 text-purple-600" />
-              Developer Terlaris — {developerPeriodLabel}
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">Ranking developer berdasarkan unit terjual</p>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                <Activity className="h-4 w-4 text-orange-500" />
+                Grafik 2 — Penjualan Terbaru (per Perumahan)
+              </CardTitle>
+              {saleEventsChartData.isDemoMode && (
+                <Badge variant="outline" className="text-xs border-orange-300 text-orange-600 shrink-0">
+                  Demo Data
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {saleEventsChartData.isDemoMode
+                ? "Preview contoh grafik — akan terisi otomatis setelah ada penjualan terdeteksi"
+                : "Unit terjual dari sale events terbaru yang terdeteksi antar refresh"}
+            </p>
           </CardHeader>
           <CardContent className="px-2 sm:px-4">
-            {topDeveloperData.length === 0 ? (
-              <div className="flex items-center justify-center h-40 text-center">
-                <div>
-                  <Activity className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Belum ada data penjualan</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Refresh data minimal 2x untuk mulai mendeteksi</p>
-                </div>
-              </div>
-            ) : (
-              <div className="h-[280px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={topDeveloperData}
-                    layout="vertical"
-                    margin={{ top: 4, right: 24, left: 4, bottom: 4 }}
+            <div className="h-[360px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={saleEventsChartData.data}
+                  layout="vertical"
+                  margin={{ top: 4, right: 24, left: 4, bottom: 4 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={112} />
+                  <Tooltip
+                    formatter={(v: number) => [`${v} unit`, "Terjual"]}
+                    labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName ?? ""}
+                  />
+                  <Bar
+                    dataKey="Unit Terjual"
+                    fill={saleEventsChartData.isDemoMode ? "#fbbf24" : "#f97316"}
+                    radius={[0, 3, 3, 0]}
+                    opacity={saleEventsChartData.isDemoMode ? 0.7 : 1}
                   >
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
-                    <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={108} />
-                    <Tooltip
-                      formatter={(v: number) => [`${v} unit`, "Terjual"]}
-                      labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName ?? ""}
+                    <LabelList
+                      dataKey="Unit Terjual"
+                      position="right"
+                      style={{ fontSize: 10, fill: "#374151" }}
                     />
-                    <Bar dataKey="Unit Terjual" fill="#8b5cf6" radius={[0, 3, 3, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            {saleEventsChartData.isDemoMode && (
+              <p className="text-xs text-orange-500 text-center mt-2 italic">
+                ↑ Contoh tampilan — data asli akan muncul setelah refresh dilakukan minimal 2x
+              </p>
             )}
           </CardContent>
         </Card>
