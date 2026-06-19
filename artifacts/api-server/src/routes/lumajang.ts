@@ -900,7 +900,6 @@ router.get("/lumajang/analytics", async (req, res) => {
 
     const perumahanChart = [...perumahan]
       .sort((a, b) => b.estTerjual - a.estTerjual)
-      .slice(0, 20)
       .map((l) => ({
         idLokasi: l.idLokasi,
         namaPerumahan: l.namaPerumahan,
@@ -1097,6 +1096,26 @@ router.post("/lumajang/import", async (req, res) => {
     req.log.error({ err }, "Failed to import data");
     res.status(500).json({ error: "Gagal import data" });
   }
+});
+
+router.get("/lumajang/in-app-notifications", (_req, res) => {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const recent = saleEvents
+    .filter((ev) => ev.recordedAt >= thirtyDaysAgo)
+    .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))
+    .flatMap((ev) =>
+      ev.listingChanges.map((c) => ({
+        id: `${ev.id}-${c.idLokasi}`,
+        eventId: ev.id,
+        recordedAt: ev.recordedAt,
+        message: `${c.namaPerumahan} Terjual ${c.unitLaku} unit`,
+        detail: `${c.namaDeveloper} · ${c.kecamatan} · ${c.unitLaku} unit`,
+        namaPerumahan: c.namaPerumahan,
+        unitLaku: c.unitLaku,
+        kecamatan: c.kecamatan,
+      }))
+    );
+  res.json({ notifications: recent, total: recent.length });
 });
 
 router.get("/lumajang/notifications", (_req, res) => {

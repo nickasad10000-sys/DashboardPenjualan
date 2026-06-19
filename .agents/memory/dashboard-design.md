@@ -1,43 +1,56 @@
 ---
 name: Dashboard map & layout decisions
-description: MapLibre GL setup, koordinat enrichment, stat card layout, dan chart decisions untuk lumajang-dashboard
+description: Key design and architecture decisions for the Lumajang housing dashboard frontend
 ---
 
-## Map: MapLibre GL (bukan react-leaflet)
-- Package: `maplibre-gl` (v5), leaflet sudah dihapus
-- Component: `src/components/perumahan-map.tsx` — standalone, tidak pakai wrapper library
-- Marker: circle layer dengan `circle-radius: 7` (pixel, tidak skala dengan zoom)
-- Clustering: GeoJSON source dengan `cluster: true`, clusterMaxZoom 12
-- Style: Carto positron (`https://basemaps.cartocdn.com/gl/positron-gl-style/style.json`)
+## Active design decisions
 
-**Why:** User minta titik tidak membesar saat zoom out — MapLibre circle layer pixel radius memenuhi ini secara default.
+### Chart library
+- MapLibre GL (NOT react-leaflet) for map
+- Recharts for all charts
 
-## Koordinat per listing
-- Field baru: `koordinat: [number, number] | null` di `ListingItem` (format [lng, lat] untuk MapLibre/GeoJSON)
-- Source: `koordinatPerumahan` dari SIKUMBANG detail endpoint (`/lokasi-perumahan/{id}/json`)
-- Parsing: `parseKoordinat(raw)` — format SIKUMBANG adalah "lat,lng", dikonversi ke [lng, lat]
-- Enrichment: `enrichListings` sekarang juga enrich listings yang `!l.koordinat` (bukan hanya yang tidak punya jumlahUnit)
-- Fallback: kecamatan coords (KECAMATAN_COORDS [lng,lat]) dengan golden-angle jitter per listing
+### Layout structure
+- Sidebar: 64px wide (w-64) fixed, blueprint "L" icon in gradient blue
+- Header: sticky top, bell notification icon + blue "Refresh Data" button
+- Main: max-w-7xl, p-4/6/8 responsive
 
-**Why:** SIKUMBANG hanya punya koordinat di detail endpoint, bukan listing page. Perlu enrichment untuk setiap listing.
+### Notification system (in-app)
+- `sonner` v2 for toast notifications (already installed)
+- `<Toaster as SonnerToaster />` added to App.tsx
+- Layout.tsx polls `/api/lumajang/sale-events` every 60s via useQuery
+- Uses `useRef` (prevEventCountRef) to detect NEW events without false positives on first load
+- Bell badge = count of notifications newer than `localStorage["lumajang-notif-last-seen-at"]`
+- `/api/lumajang/in-app-notifications` endpoint derives from saleEvents
 
-## Stat cards: hanya 3
-- Total Lokasi (klik → peta MapLibre + tabel)
-- Total Developer (klik → tabel developer expandable)
-- Total Stok (klik → breakdown per perumahan, bukan per kecamatan)
-- "Dipilih/Diminati" dan "Sisa Stok" dihapus — sudah ada di StokModal dan di description card Total Stok
+### Analytics Chart 1 — scrollable ALL perumahan
+- `perumahanChart` NO longer sliced to 20 — returns all ~118 perumahan
+- Scrollable: outer `div.overflow-y-auto maxH:580px` + inner `div` height = `Math.max(420, count*28)px`
+- Labels: `LabelList position="insideRight"` for unit count (white), `position="right"` for pct (dark)
+- Top 5 Pie replaced with Top 10 horizontal BarChart with Cell colors
 
-## StokModal: per perumahan
-- Data dari `useGetLumajangListings(limit=500)` + `useGetLumajangKecamatan`
-- "Est. Dipilih" per perumahan = proporsional dari kecamatan pilihan: `(unit/kec_supply)*kec_pilihan`
-- Label jelas "Est. Dipilih" supaya tidak misleading
+### API data shape
+- perumahanChart includes ALL perumahan (no slice), sorted by estTerjual desc
+- `pctKabupaten` = (estTerjual / totalEstTerjual) * 100
+- `pctTerjual` = (estTerjual / totalUnit) * 100
+- Stat cards: "Unit Tersedia" (not "Sisa Unit"), "Sale Events" for detected sales
 
-## Charts
-1. Supply vs Peminat per Kecamatan (top 10) — bar chart vertikal, existing
-2. Stok per Perumahan (top 15) — bar chart HORIZONTAL baru, multicolor
+### Export Excel  
+- 5 sheets: Ringkasan Eksekutif, Penjualan Per Bulan, Ranking Perumahan, Sale Events Terdeteksi, Data Kecamatan
+- buildRingkasanSheet() creates summary report format (KPI + top kecamatan + top perumahan)
+- buildPenjualanBulananSheet() groups sale events by month
+- Indonesian-named columns in all sheets
 
-## Mobile responsive
-- Grid cards: `grid-cols-1 sm:grid-cols-3`
-- Dialog: `max-h-[92dvh]`
-- Table: `overflow-x-auto` dengan `min-w-[...]` per kolom
-- Chart heights: lebih kecil di mobile via sm: variants
+### Workflow port conflict
+- Dashboard workflow (port 24105) conflicts with `artifacts/lumajang-dashboard: web`
+- `artifacts/lumajang-dashboard: web` is the CORRECT running workflow (uses HMR)
+- Dashboard workflow can be ignored/disabled — don't try to restart it
+
+### Query keys used in layout
+- `["sale-events-layout"]` for sale events polling
+- `["in-app-notifications"]` for notification panel
+- These are separate from dashboard's `["sale-events"]` to avoid conflict
+
+## Coordinate approach
+- Per listing coordinates from SIKUMBANG detail endpoint `/lokasi-perumahan/{id}/json`
+- Fallback: kecamatan centroid + jitter if no GPS coords
+- 3 stat cards on dashboard (not more)

@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Download, Upload, FileSpreadsheet, FileText, Loader2, CheckCircle2,
-  AlertCircle, Info,
+  AlertCircle, Info, BarChart2, TrendingDown,
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import { Badge } from "@/components/ui/badge";
 
 interface ExportData {
   exportedAt: string;
@@ -74,13 +75,153 @@ function exportToCSV(rows: Record<string, unknown>[], filename: string) {
   downloadBlob(blob, filename);
 }
 
-function exportToExcel(sheets: { name: string; data: Record<string, unknown>[] }[], filename: string) {
+function buildRingkasanSheet(data: ExportData): Record<string, unknown>[] {
+  const totalUnit = data.listings.reduce((s, l) => s + (l.totalUnit ?? 0), 0);
+  const totalTerjual = data.listings.reduce((s, l) => s + (l.estTerjual ?? 0), 0);
+  const totalSisa = data.listings.reduce((s, l) => s + (l.estSisa ?? 0), 0);
+  const pctSerapan = totalUnit > 0 ? ((totalTerjual / totalUnit) * 100).toFixed(1) : "0.0";
+  const totalSaleEvents = data.saleEvents.reduce((s, e) => s + (e.unitLaku ?? 0), 0);
+  const devSet = new Set(data.listings.map((l) => l.namaDeveloper));
+
+  const tglExport = data.exportedAt ? new Date(data.exportedAt).toLocaleString("id-ID") : "—";
+  const topKec = [...data.kecamatan].sort((a, b) => b.supply - a.supply).slice(0, 5);
+  const topListing = [...data.listings].sort((a, b) => b.estTerjual - a.estTerjual).slice(0, 10);
+
+  const rows: Record<string, unknown>[] = [
+    { Kategori: "=== RINGKASAN EKSEKUTIF ===", Nilai: "", Keterangan: "" },
+    { Kategori: "Tanggal Export", Nilai: tglExport, Keterangan: "" },
+    { Kategori: "", Nilai: "", Keterangan: "" },
+    { Kategori: "--- KPI UTAMA ---", Nilai: "", Keterangan: "" },
+    { Kategori: "Total Lokasi Perumahan", Nilai: data.listings.length, Keterangan: "unit perumahan terdaftar" },
+    { Kategori: "Total Developer Aktif", Nilai: devSet.size, Keterangan: "pengembang perumahan" },
+    { Kategori: "Total Unit Supply", Nilai: totalUnit, Keterangan: "unit tersedia" },
+    { Kategori: "Estimasi Unit Terjual", Nilai: totalTerjual, Keterangan: "unit dipilih (estimasi proporsional kecamatan)" },
+    { Kategori: "Unit Sisa Tersedia", Nilai: totalSisa, Keterangan: "unit belum terjual" },
+    { Kategori: "Tingkat Serapan", Nilai: `${pctSerapan}%`, Keterangan: "persen unit terjual dari total supply" },
+    { Kategori: "Sale Events Terdeteksi", Nilai: totalSaleEvents, Keterangan: "unit terjual dari deteksi penurunan stok (30 hari)" },
+    { Kategori: "", Nilai: "", Keterangan: "" },
+    { Kategori: "--- TOP 5 KECAMATAN (Supply) ---", Nilai: "", Keterangan: "" },
+    ...topKec.map((k, i) => ({
+      Kategori: `#${i + 1} ${k.namaWilayah}`,
+      Nilai: k.supply,
+      Keterangan: `Dipilih: ${k.pilihan} | Sisa: ${k.sisa} | ${k.supply > 0 ? ((k.pilihan / k.supply) * 100).toFixed(1) : 0}% serapan`,
+    })),
+    { Kategori: "", Nilai: "", Keterangan: "" },
+    { Kategori: "--- TOP 10 PERUMAHAN (Est. Terjual) ---", Nilai: "", Keterangan: "" },
+    ...topListing.map((l, i) => ({
+      Kategori: `#${i + 1} ${l.namaPerumahan}`,
+      Nilai: l.estTerjual,
+      Keterangan: `${l.kecamatan} | ${l.namaDeveloper} | Total: ${l.totalUnit} unit | Serapan: ${l.pctTerjual}%`,
+    })),
+  ];
+
+  return rows;
+}
+
+function buildPenjualanBulananSheet(data: ExportData): Record<string, unknown>[] {
+  if (data.saleEvents.length === 0) {
+    return [{ Keterangan: "Belum ada data penjualan terdeteksi", Bulan: "", Perumahan: "", "Unit Terjual": "" }];
+  }
+
+  const byMonth = new Map<string, { totalUnit: number; events: typeof data.saleEvents }>();
+  for (const ev of data.saleEvents) {
+    const m = ev.recordedAt.slice(0, 7);
+    const prev = byMonth.get(m);
+    if (prev) {
+      prev.totalUnit += ev.unitLaku;
+      prev.events.push(ev);
+    } else {
+      byMonth.set(m, { totalUnit: ev.unitLaku, events: [ev] });
+    }
+  }
+
+  const rows: Record<string, unknown>[] = [
+    { Bulan: "=== PENJUALAN PER BULAN ===", "Total Unit Terjual": "", "Jumlah Transaksi": "", Perumahan: "", "Unit Terjual": "", Kecamatan: "", Developer: "", Tanggal: "" },
+  ];
+
+  for (const [month, info] of [...byMonth.entries()].sort()) {
+    const [yr, mo] = month.split("-");
+    const label = new Date(parseInt(yr), parseInt(mo) - 1).toLocaleString("id-ID", { month: "long", year: "numeric" });
+    rows.push({ Bulan: `--- ${label} (${info.totalUnit} unit) ---`, "Total Unit Terjual": info.totalUnit, "Jumlah Transaksi": info.events.length, Perumahan: "", "Unit Terjual": "", Kecamatan: "", Developer: "", Tanggal: "" });
+    for (const ev of info.events) {
+      rows.push({
+        Bulan: "",
+        "Total Unit Terjual": "",
+        "Jumlah Transaksi": "",
+        Perumahan: ev.namaPerumahan,
+        "Unit Terjual": ev.unitLaku,
+        Kecamatan: ev.kecamatan,
+        Developer: ev.namaDeveloper,
+        Tanggal: new Date(ev.recordedAt).toLocaleString("id-ID"),
+      });
+    }
+    rows.push({ Bulan: "", "Total Unit Terjual": "", "Jumlah Transaksi": "", Perumahan: "", "Unit Terjual": "", Kecamatan: "", Developer: "", Tanggal: "" });
+  }
+
+  return rows;
+}
+
+function buildListingSheet(data: ExportData): Record<string, unknown>[] {
+  return data.listings.map((l) => ({
+    "ID Lokasi": l.idLokasi,
+    "Nama Perumahan": l.namaPerumahan,
+    "Jenis": l.jenisPerumahan,
+    "Kecamatan": l.kecamatan,
+    "Developer": l.namaDeveloper,
+    "Asosiasi": l.asosiasi,
+    "Total Unit": l.totalUnit,
+    "Est. Terjual": l.estTerjual,
+    "Sisa Tersedia": l.estSisa,
+    "% Serapan": l.pctTerjual,
+    "Lat": l.koordinatLat,
+    "Lng": l.koordinatLng,
+  }));
+}
+
+function buildSaleEventsSheet(data: ExportData): Record<string, unknown>[] {
+  return data.saleEvents.map((e) => ({
+    "Tanggal": new Date(e.recordedAt).toLocaleString("id-ID"),
+    "Perumahan": e.namaPerumahan,
+    "Developer": e.namaDeveloper,
+    "Kecamatan": e.kecamatan,
+    "Unit Terjual": e.unitLaku,
+    "Stok Sebelum": e.unitSebelum,
+    "Stok Sesudah": e.unitSesudah,
+  }));
+}
+
+function buildKecamatanSheet(data: ExportData): Record<string, unknown>[] {
+  return [...data.kecamatan].sort((a, b) => b.supply - a.supply).map((k) => ({
+    "Kecamatan": k.namaWilayah,
+    "Supply (Unit)": k.supply,
+    "Dipilih": k.pilihan,
+    "Peminatan": k.peminatan,
+    "Sisa": k.sisa,
+    "% Serapan": k.supply > 0 ? ((k.pilihan / k.supply) * 100).toFixed(1) + "%" : "0%",
+  }));
+}
+
+function exportToExcel(data: ExportData, filename: string) {
   const wb = XLSX.utils.book_new();
+
+  const sheets = [
+    { name: "Ringkasan Eksekutif", rows: buildRingkasanSheet(data) },
+    { name: "Penjualan Per Bulan", rows: buildPenjualanBulananSheet(data) },
+    { name: "Ranking Perumahan", rows: buildListingSheet(data) },
+    { name: "Sale Events Terdeteksi", rows: buildSaleEventsSheet(data) },
+    { name: "Data Kecamatan", rows: buildKecamatanSheet(data) },
+  ];
+
   for (const sheet of sheets) {
-    if (sheet.data.length === 0) continue;
-    const ws = XLSX.utils.json_to_sheet(sheet.data);
+    if (sheet.rows.length === 0) continue;
+    const ws = XLSX.utils.json_to_sheet(sheet.rows);
+    const colCount = Object.keys(sheet.rows[0]).length;
+    ws["!cols"] = Array.from({ length: colCount }, (_, i) => ({
+      wch: i === 0 ? 36 : i === 1 ? 16 : 22,
+    }));
     XLSX.utils.book_append_sheet(wb, ws, sheet.name.slice(0, 31));
   }
+
   XLSX.writeFile(wb, filename);
 }
 
@@ -102,29 +243,27 @@ export default function ExportPage() {
 
   const handleExportListingsCSV = () => {
     if (!data) return;
-    exportToCSV(data.listings.map((l) => ({ ...l })), `listings-lumajang-${ts()}.csv`);
+    exportToCSV(buildListingSheet(data), `listing-perumahan-lumajang-${ts()}.csv`);
   };
 
   const handleExportSaleEventsCSV = () => {
     if (!data) return;
-    exportToCSV(data.saleEvents.map((e) => ({ ...e })), `sale-events-lumajang-${ts()}.csv`);
+    exportToCSV(buildSaleEventsSheet(data), `penjualan-terdeteksi-lumajang-${ts()}.csv`);
   };
 
   const handleExportKecamatanCSV = () => {
     if (!data) return;
-    exportToCSV(data.kecamatan.map((k) => ({ ...k })), `kecamatan-lumajang-${ts()}.csv`);
+    exportToCSV(buildKecamatanSheet(data), `kecamatan-lumajang-${ts()}.csv`);
+  };
+
+  const handleExportRingkasanCSV = () => {
+    if (!data) return;
+    exportToCSV(buildRingkasanSheet(data), `ringkasan-eksekutif-lumajang-${ts()}.csv`);
   };
 
   const handleExportAllExcel = () => {
     if (!data) return;
-    exportToExcel(
-      [
-        { name: "Listings", data: data.listings as unknown as Record<string, unknown>[] },
-        { name: "Sale Events", data: data.saleEvents as unknown as Record<string, unknown>[] },
-        { name: "Kecamatan", data: data.kecamatan as unknown as Record<string, unknown>[] },
-      ],
-      `dashboard-lumajang-${ts()}.xlsx`
-    );
+    exportToExcel(data, `laporan-perumahan-lumajang-${ts()}.xlsx`);
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -167,12 +306,12 @@ export default function ExportPage() {
       const mapped = importedListings.map((row) => ({
         idLokasi: String(row.idLokasi ?? row["ID Lokasi"] ?? ""),
         namaPerumahan: String(row.namaPerumahan ?? row["Nama Perumahan"] ?? ""),
-        jenisPerumahan: String(row.jenisPerumahan ?? ""),
-        kecamatan: String(row.kecamatan ?? ""),
+        jenisPerumahan: String(row.jenisPerumahan ?? row["Jenis"] ?? ""),
+        kecamatan: String(row.kecamatan ?? row["Kecamatan"] ?? ""),
         kelurahan: String(row.kelurahan ?? ""),
         namaDeveloper: String(row.namaDeveloper ?? row["Developer"] ?? ""),
-        asosiasi: String(row.asosiasi ?? ""),
-        jumlahUnit: String(row.totalUnit ?? row.jumlahUnit ?? ""),
+        asosiasi: String(row.asosiasi ?? row["Asosiasi"] ?? ""),
+        jumlahUnit: String(row.totalUnit ?? row["Total Unit"] ?? row.jumlahUnit ?? ""),
       })).filter((r) => r.idLokasi);
 
       if (mapped.length === 0) throw new Error("Tidak ada data valid yang ditemukan dalam file");
@@ -202,12 +341,19 @@ export default function ExportPage() {
     }
   };
 
+  const totalTerjual = data?.listings.reduce((s, l) => s + (l.estTerjual ?? 0), 0) ?? 0;
+  const pctSerapan = data
+    ? data.listings.reduce((s, l) => s + l.totalUnit, 0) > 0
+      ? ((totalTerjual / data.listings.reduce((s, l) => s + l.totalUnit, 0)) * 100).toFixed(1)
+      : "0.0"
+    : "—";
+
   return (
     <div className="space-y-6 p-1">
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Export & Import Data</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Download data penjualan ke CSV/Excel atau upload data eksternal
+          Download laporan lengkap dalam format Excel atau CSV, atau upload data eksternal
         </p>
       </div>
 
@@ -224,74 +370,86 @@ export default function ExportPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {data && [
-          { label: "Listing Perumahan", count: data.listings.length, color: "text-blue-600" },
-          { label: "Sale Events", count: data.saleEvents.length, color: "text-orange-600" },
-          { label: "Data Kecamatan", count: data.kecamatan.length, color: "text-green-600" },
-        ].map((item) => (
-          <Card key={item.label}>
-            <CardContent className="p-4 text-center">
-              <div className={`text-3xl font-bold ${item.color}`}>{item.count.toLocaleString()}</div>
-              <div className="text-sm text-muted-foreground mt-1">{item.label}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {data && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "Listing Perumahan", count: data.listings.length, color: "text-blue-600", bg: "bg-blue-50 border-blue-100", icon: FileSpreadsheet },
+            { label: "Sale Events", count: data.saleEvents.length, color: "text-orange-600", bg: "bg-orange-50 border-orange-100", icon: TrendingDown },
+            { label: "Data Kecamatan", count: data.kecamatan.length, color: "text-green-600", bg: "bg-green-50 border-green-100", icon: BarChart2 },
+            { label: "Tingkat Serapan", count: `${pctSerapan}%`, color: "text-purple-600", bg: "bg-purple-50 border-purple-100", icon: BarChart2 },
+          ].map((item) => (
+            <Card key={item.label} className={`border ${item.bg}`}>
+              <CardContent className="p-4 text-center">
+                <div className={`text-2xl font-bold ${item.color}`}>{typeof item.count === "number" ? item.count.toLocaleString() : item.count}</div>
+                <div className="text-xs text-muted-foreground mt-1">{item.label}</div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <Tabs defaultValue="export">
-        <TabsList>
-          <TabsTrigger value="export">
+        <TabsList className="bg-muted/60 rounded-xl p-1">
+          <TabsTrigger value="export" className="rounded-lg">
             <Download className="h-4 w-4 mr-2" /> Export
           </TabsTrigger>
-          <TabsTrigger value="import">
+          <TabsTrigger value="import" className="rounded-lg">
             <Upload className="h-4 w-4 mr-2" /> Import
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="export" className="mt-4 space-y-4">
-          <Card>
+          <Card className="shadow-sm border-green-100">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <FileSpreadsheet className="h-5 w-5 text-green-600" />
-                Export ke Excel (Semua Sheet)
+                Export Laporan Excel Lengkap
               </CardTitle>
               <p className="text-sm text-muted-foreground">
-                Satu file .xlsx berisi 3 sheet: Listings, Sale Events, dan Kecamatan
+                File .xlsx berisi 5 sheet: <strong>Ringkasan Eksekutif</strong>, Penjualan Per Bulan, Ranking Perumahan, Sale Events, dan Data Kecamatan
               </p>
             </CardHeader>
             <CardContent>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {["📊 Ringkasan Eksekutif", "📅 Penjualan Per Bulan", "🏠 Ranking Perumahan", "📈 Sale Events", "🗺️ Data Kecamatan"].map((s) => (
+                  <Badge key={s} variant="secondary" className="text-xs font-normal">{s}</Badge>
+                ))}
+              </div>
               <Button
                 onClick={handleExportAllExcel}
                 disabled={!data || isLoading}
                 className="gap-2 bg-green-600 hover:bg-green-700"
               >
                 <Download className="h-4 w-4" />
-                Download Excel (.xlsx)
+                Download Laporan Excel (.xlsx)
               </Button>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <FileText className="h-5 w-5 text-blue-600" />
-                Export ke CSV (Per Dataset)
+                Export CSV (Per Dataset)
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent>
               <div className="flex flex-wrap gap-3">
+                <Button variant="outline" onClick={handleExportRingkasanCSV} disabled={!data || isLoading} className="gap-2">
+                  <Download className="h-4 w-4" />
+                  Ringkasan Eksekutif
+                </Button>
                 <Button variant="outline" onClick={handleExportListingsCSV} disabled={!data || isLoading} className="gap-2">
                   <Download className="h-4 w-4" />
-                  Listings Perumahan ({data?.listings.length ?? 0} baris)
+                  Listing ({data?.listings.length ?? 0})
                 </Button>
                 <Button variant="outline" onClick={handleExportSaleEventsCSV} disabled={!data || isLoading} className="gap-2">
                   <Download className="h-4 w-4" />
-                  Sale Events ({data?.saleEvents.length ?? 0} baris)
+                  Sale Events ({data?.saleEvents.length ?? 0})
                 </Button>
                 <Button variant="outline" onClick={handleExportKecamatanCSV} disabled={!data || isLoading} className="gap-2">
                   <Download className="h-4 w-4" />
-                  Data Kecamatan ({data?.kecamatan.length ?? 0} baris)
+                  Kecamatan ({data?.kecamatan.length ?? 0})
                 </Button>
               </div>
             </CardContent>
@@ -310,13 +468,13 @@ export default function ExportPage() {
               <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
               <div className="text-sm text-blue-800 space-y-1">
                 <p className="font-semibold">Panduan Import</p>
-                <p>Upload file CSV atau Excel (.xlsx) dengan kolom: <code className="bg-blue-100 px-1 rounded text-xs">idLokasi, namaPerumahan, kecamatan, namaDeveloper, totalUnit</code></p>
-                <p>Data yang di-import akan <strong>menambahkan atau memperbarui</strong> data cache berdasarkan <code className="bg-blue-100 px-1 rounded text-xs">idLokasi</code>. Data SIKUMBANG tetap menjadi sumber utama saat refresh.</p>
+                <p>Upload file CSV atau Excel (.xlsx). Kolom minimal: <code className="bg-blue-100 px-1 rounded text-xs">ID Lokasi, Nama Perumahan, Kecamatan, Developer, Total Unit</code></p>
+                <p>Data akan <strong>menambahkan atau memperbarui</strong> berdasarkan ID Lokasi. Data SIKUMBANG tetap menjadi sumber utama saat refresh.</p>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Upload File</CardTitle>
             </CardHeader>
@@ -346,7 +504,7 @@ export default function ExportPage() {
               </label>
 
               {importStatus && (
-                <div className={`flex items-start gap-3 rounded-lg p-4 ${importStatus.type === "success" ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
+                <div className={`flex items-start gap-3 rounded-xl p-4 ${importStatus.type === "success" ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
                   {importStatus.type === "success"
                     ? <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
                     : <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
@@ -359,7 +517,7 @@ export default function ExportPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Template Download</CardTitle>
               <p className="text-xs text-muted-foreground">Download template CSV untuk mengisi data baru</p>
@@ -371,20 +529,13 @@ export default function ExportPage() {
                 onClick={() => {
                   const template = [
                     {
-                      idLokasi: "LMJ-CONTOH-001",
-                      namaPerumahan: "Perumahan Contoh",
-                      jenisPerumahan: "RST",
-                      kecamatan: "SUKODONO",
-                      kelurahan: "",
-                      namaDeveloper: "PT. Developer Contoh",
-                      asosiasi: "REI",
-                      totalUnit: 100,
-                      estTerjual: 0,
-                      estSisa: 100,
-                      pctTerjual: 0,
-                      koordinatLat: -8.123,
-                      koordinatLng: 113.456,
-                      fotoUrl: "",
+                      "ID Lokasi": "LMJ-CONTOH-001",
+                      "Nama Perumahan": "Perumahan Contoh",
+                      "Jenis": "RST",
+                      "Kecamatan": "SUKODONO",
+                      "Developer": "PT. Developer Contoh",
+                      "Asosiasi": "REI",
+                      "Total Unit": 100,
                     }
                   ];
                   exportToCSV(template as unknown as Record<string, unknown>[], "template-import-lumajang.csv");

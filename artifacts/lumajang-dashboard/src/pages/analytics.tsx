@@ -70,21 +70,22 @@ function KpiCard({
   trend?: number;
 }) {
   const colorMap = {
-    blue: "text-blue-600 bg-blue-50 border-blue-100",
-    green: "text-green-600 bg-green-50 border-green-100",
-    yellow: "text-yellow-600 bg-yellow-50 border-yellow-100",
-    purple: "text-purple-600 bg-purple-50 border-purple-100",
-    orange: "text-orange-600 bg-orange-50 border-orange-100",
-    red: "text-red-600 bg-red-50 border-red-100",
+    blue: { card: "border-blue-200 bg-gradient-to-br from-blue-50 to-white", icon: "text-blue-600 bg-blue-100", text: "text-blue-700" },
+    green: { card: "border-green-200 bg-gradient-to-br from-green-50 to-white", icon: "text-green-600 bg-green-100", text: "text-green-700" },
+    yellow: { card: "border-yellow-200 bg-gradient-to-br from-yellow-50 to-white", icon: "text-yellow-600 bg-yellow-100", text: "text-yellow-700" },
+    purple: { card: "border-purple-200 bg-gradient-to-br from-purple-50 to-white", icon: "text-purple-600 bg-purple-100", text: "text-purple-700" },
+    orange: { card: "border-orange-200 bg-gradient-to-br from-orange-50 to-white", icon: "text-orange-600 bg-orange-100", text: "text-orange-700" },
+    red: { card: "border-red-200 bg-gradient-to-br from-red-50 to-white", icon: "text-red-600 bg-red-100", text: "text-red-700" },
   };
+  const c = colorMap[color];
 
   return (
-    <Card className={`border ${colorMap[color]}`}>
+    <Card className={`border ${c.card} shadow-sm`}>
       <CardContent className="p-4">
         <div className="flex items-start justify-between">
-          <div>
+          <div className="flex-1">
             <p className="text-xs font-medium text-muted-foreground mb-1">{title}</p>
-            <p className="text-2xl font-bold">{typeof value === "number" ? value.toLocaleString() : value}</p>
+            <p className={`text-2xl font-bold ${c.text}`}>{typeof value === "number" ? value.toLocaleString() : value}</p>
             {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
             {trend !== undefined && (
               <div className={`flex items-center gap-1 mt-1 text-xs font-medium ${trend >= 0 ? "text-green-600" : "text-red-600"}`}>
@@ -93,8 +94,8 @@ function KpiCard({
               </div>
             )}
           </div>
-          <div className={`p-2 rounded-lg ${colorMap[color]}`}>
-            <Icon className="h-5 w-5" />
+          <div className={`p-2.5 rounded-xl ${c.icon}`}>
+            <Icon className="h-4 w-4" />
           </div>
         </div>
       </CardContent>
@@ -133,7 +134,7 @@ export default function Analytics() {
 
   const { summary, perumahanChart, developerChart, kecamatanChart, saleTimeline, snapshots } = data;
 
-  const top5Perumahan = perumahanChart.slice(0, 5);
+  const top10Perumahan = perumahanChart.slice(0, 10);
   const top5Developer = developerChart.slice(0, 5);
 
   const devPieData = developerChart.slice(0, 8).map((d, i) => ({
@@ -157,6 +158,8 @@ export default function Analytics() {
     { step: "Sisa", value: summary.totalSisa, fill: "#22c55e" },
   ];
 
+  const chartHeight = Math.max(420, perumahanChart.length * 28);
+
   return (
     <div className="space-y-6 p-1">
       <div>
@@ -169,108 +172,171 @@ export default function Analytics() {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <KpiCard title="Total Supply" value={summary.totalSupply} icon={Package} color="blue" subtitle="unit tersedia" />
         <KpiCard title="Total Dipilih" value={summary.totalPilihan} icon={TrendingUp} color="orange" subtitle="unit dipilih" />
-        <KpiCard title="Sisa Unit" value={summary.totalSisa} icon={Activity} color="green" subtitle="unit tersisa" />
+        <KpiCard title="Unit Tersedia" value={summary.totalSisa} icon={Activity} color="green" subtitle="unit masih ada" />
         <KpiCard title="Tingkat Serapan" value={`${summary.pctTerjual}%`} icon={BarChart2} color="purple" subtitle="dari total supply" />
         <KpiCard title="Perumahan Aktif" value={summary.totalPerumahan} icon={MapPin} color="blue" subtitle="lokasi terdaftar" />
         <KpiCard title="Sale Events" value={summary.totalSaleEvents} icon={TrendingDown} color="red" subtitle="unit terdeteksi terjual" />
       </div>
 
       <Tabs defaultValue="penjualan">
-        <TabsList className="grid grid-cols-4 w-full max-w-lg">
-          <TabsTrigger value="penjualan">Penjualan</TabsTrigger>
-          <TabsTrigger value="developer">Developer</TabsTrigger>
-          <TabsTrigger value="kecamatan">Kecamatan</TabsTrigger>
-          <TabsTrigger value="trend">Tren</TabsTrigger>
+        <TabsList className="grid grid-cols-4 w-full max-w-lg bg-muted/60 rounded-xl p-1">
+          <TabsTrigger value="penjualan" className="rounded-lg">Penjualan</TabsTrigger>
+          <TabsTrigger value="developer" className="rounded-lg">Developer</TabsTrigger>
+          <TabsTrigger value="kecamatan" className="rounded-lg">Kecamatan</TabsTrigger>
+          <TabsTrigger value="trend" className="rounded-lg">Tren</TabsTrigger>
         </TabsList>
 
+        {/* === TAB PENJUALAN === */}
         <TabsContent value="penjualan" className="space-y-5 mt-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Card>
+
+            {/* Chart 1 — Ranking Penjualan Total (ALL perumahan, scrollable) */}
+            <Card className="shadow-sm">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-green-600" />
-                  Ranking Penjualan Total — Estimasi Unit Terjual
+                  Ranking Penjualan Total
                 </CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  Estimasi terjual = total unit × (pilihan/supply) kecamatan · label kanan = % serapan Kab. Lumajang
+                  Est. terjual = total unit × (pilihan÷supply) kecamatan · angka = est. unit terjual · % = serapan Kab. Lumajang
                 </p>
-              </CardHeader>
-              <CardContent className="px-2">
-                <div className="h-[520px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={perumahanChart}
-                      layout="vertical"
-                      margin={{ top: 4, right: 70, left: 4, bottom: 4 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                      <XAxis type="number" tick={{ fontSize: 10 }} />
-                      <YAxis type="category" dataKey="namaPerumahan" tick={{ fontSize: 8 }} width={110}
-                        tickFormatter={(v) => v.length > 20 ? v.slice(0, 20) + "…" : v} />
-                      <Tooltip
-                        formatter={(v: number) => [`${v.toLocaleString()} unit`, "Est. Terjual"]}
-                        labelFormatter={(_, payload) => {
-                          const p = payload?.[0]?.payload;
-                          return p ? `${p.namaPerumahan} · ${p.kecamatan} · ${p.pctTerjual}% terjual · ${p.pctKabupaten}% serapan kab.` : "";
-                        }}
-                      />
-                      <Bar dataKey="estTerjual" name="Est. Terjual" fill="#22c55e" radius={[0, 3, 3, 0]}>
-                        <LabelList dataKey="pctKabupaten" position="right"
-                          formatter={(v: number) => `${v}%`}
-                          style={{ fontSize: 9, fill: "#374151", fontWeight: "600" }} />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="inline-block w-2.5 h-2.5 rounded-sm bg-green-500" />
+                    Est. Unit Terjual
+                  </span>
+                  <span className="text-xs text-muted-foreground">· label kanan = % serapan kab.</span>
                 </div>
+              </CardHeader>
+              <CardContent className="px-2 pb-2">
+                <div className="overflow-y-auto border rounded-lg bg-muted/10" style={{ maxHeight: "580px" }}>
+                  <div style={{ height: `${chartHeight}px` }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={perumahanChart}
+                        layout="vertical"
+                        margin={{ top: 4, right: 56, left: 4, bottom: 4 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" />
+                        <XAxis type="number" tick={{ fontSize: 10 }} />
+                        <YAxis
+                          type="category"
+                          dataKey="namaPerumahan"
+                          tick={{ fontSize: 8 }}
+                          width={115}
+                          tickFormatter={(v) => v.length > 22 ? v.slice(0, 22) + "…" : v}
+                        />
+                        <Tooltip
+                          formatter={(v: number) => [`${v.toLocaleString()} unit`, "Est. Unit Terjual"]}
+                          labelFormatter={(_, payload) => {
+                            const p = payload?.[0]?.payload;
+                            return p ? `${p.namaPerumahan} · ${p.kecamatan}` : "";
+                          }}
+                          contentStyle={{ fontSize: 11 }}
+                        />
+                        <Bar dataKey="estTerjual" name="Est. Unit Terjual" fill="#22c55e" radius={[0, 3, 3, 0]}>
+                          <LabelList
+                            dataKey="estTerjual"
+                            position="insideRight"
+                            formatter={(v: number) => v >= 10 ? v.toLocaleString() : v > 0 ? `${v}` : ""}
+                            style={{ fontSize: 8, fill: "#ffffff", fontWeight: "700" }}
+                          />
+                          <LabelList
+                            dataKey="pctKabupaten"
+                            position="right"
+                            formatter={(v: number) => v > 0 ? `${v}%` : ""}
+                            style={{ fontSize: 10, fill: "#111827", fontWeight: "700" }}
+                          />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  {perumahanChart.length} perumahan · scroll untuk lihat semua
+                </p>
               </CardContent>
             </Card>
 
             <div className="space-y-4">
-              <Card>
+              {/* Top 10 Perumahan — horizontal bar (bukan pie) */}
+              <Card className="shadow-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm flex items-center gap-2">
                     <PieChartIcon className="h-4 w-4 text-blue-600" />
-                    Top 5 Perumahan — Proporsi Serapan
+                    Top 10 Perumahan — Est. Unit Terjual
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="h-[200px]">
+                <CardContent className="px-2">
+                  <div className="h-[260px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={top5Perumahan.map((p, i) => ({ name: p.namaPerumahan.slice(0, 20), value: p.estTerjual, color: COLORS[i] }))}
-                          cx="50%" cy="50%" outerRadius={70} dataKey="value" label={({ name, pctKabupaten }) => `${name?.slice(0, 12)}… ${pctKabupaten ?? ""}%`}
-                          labelLine={false}>
-                          {top5Perumahan.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                        </Pie>
-                        <Tooltip formatter={(v: number) => [`${v} unit`, "Est. Terjual"]} />
-                      </PieChart>
+                      <BarChart
+                        data={top10Perumahan}
+                        layout="vertical"
+                        margin={{ top: 2, right: 50, left: 4, bottom: 2 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" />
+                        <XAxis type="number" tick={{ fontSize: 9 }} />
+                        <YAxis
+                          type="category"
+                          dataKey="namaPerumahan"
+                          tick={{ fontSize: 8 }}
+                          width={110}
+                          tickFormatter={(v) => v.length > 20 ? v.slice(0, 20) + "…" : v}
+                        />
+                        <Tooltip
+                          formatter={(v: number) => [`${v.toLocaleString()} unit terjual`, "Est. Terjual"]}
+                          labelFormatter={(_, payload) => payload?.[0]?.payload?.namaPerumahan ?? ""}
+                          contentStyle={{ fontSize: 11 }}
+                        />
+                        {top10Perumahan.map((_, i) => null)}
+                        <Bar dataKey="estTerjual" name="Est. Terjual" radius={[0, 3, 3, 0]}>
+                          {top10Perumahan.map((_, i) => (
+                            <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                          ))}
+                          <LabelList
+                            dataKey="estTerjual"
+                            position="right"
+                            formatter={(v: number) => `${v}`}
+                            style={{ fontSize: 9, fill: "#374151", fontWeight: "700" }}
+                          />
+                        </Bar>
+                      </BarChart>
                     </ResponsiveContainer>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card>
+              {/* Ranking Detail */}
+              <Card className="shadow-sm">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Ranking Perumahan — Detail</CardTitle>
+                  <CardTitle className="text-sm">Ranking Perumahan — Est. Unit Terjual</CardTitle>
+                  <p className="text-xs text-muted-foreground">Angka = estimasi unit terjual, % bar = tingkat serapan per perumahan</p>
                 </CardHeader>
                 <CardContent className="px-3">
-                  <div className="space-y-3">
-                    {perumahanChart.slice(0, 8).map((p, i) => (
+                  <div className="space-y-3 max-h-56 overflow-y-auto">
+                    {perumahanChart.slice(0, 10).map((p, i) => (
                       <div key={p.idLokasi}>
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-xs font-bold text-muted-foreground w-4 shrink-0">#{i + 1}</span>
+                            <span
+                              className="text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-white"
+                              style={{ background: COLORS[i % COLORS.length], fontSize: "9px" }}
+                            >
+                              {i + 1}
+                            </span>
                             <div className="min-w-0">
-                              <p className="text-xs font-medium truncate">{p.namaPerumahan}</p>
+                              <p className="text-xs font-medium truncate leading-tight">{p.namaPerumahan}</p>
                               <p className="text-xs text-muted-foreground truncate">{p.kecamatan}</p>
                             </div>
                           </div>
                           <div className="text-right shrink-0">
-                            <p className="text-xs font-bold text-green-600">{p.estTerjual} unit</p>
-                            <p className="text-xs text-muted-foreground">{p.pctKabupaten}% kab.</p>
+                            <p className="text-xs font-bold text-green-600">{p.estTerjual} unit terjual</p>
+                            <p className="text-xs text-muted-foreground">{p.pctKabupaten}% serapan kab.</p>
                           </div>
                         </div>
                         <Progress value={p.pctTerjual} className="h-1.5" />
+                        <p className="text-xs text-muted-foreground mt-0.5">{p.pctTerjual}% serapan perumahan ini</p>
                       </div>
                     ))}
                   </div>
@@ -279,33 +345,37 @@ export default function Analytics() {
             </div>
           </div>
 
-          <Card>
+          {/* Matriks Performa — Semua Perumahan */}
+          <Card className="shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Matriks Performa — Semua Perumahan</CardTitle>
-              <p className="text-xs text-muted-foreground">Persentase unit terjual dari total unit masing-masing perumahan</p>
+              <CardTitle className="text-sm">Matriks Performa — % Serapan per Perumahan</CardTitle>
+              <p className="text-xs text-muted-foreground">Persentase est. unit terjual dari total unit masing-masing perumahan</p>
             </CardHeader>
             <CardContent className="px-2">
-              <div className="h-[240px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={perumahanChart} margin={{ top: 8, right: 8, left: -10, bottom: 60 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="namaPerumahan" tick={{ fontSize: 8 }} angle={-45} textAnchor="end"
-                      tickFormatter={(v) => v.slice(0, 14)} />
-                    <YAxis tick={{ fontSize: 10 }} unit="%" domain={[0, 100]} />
-                    <Tooltip
-                      formatter={(v: number) => [`${v}%`, "Terjual"]}
-                      labelFormatter={(_, payload) => payload?.[0]?.payload?.namaPerumahan ?? ""}
-                    />
-                    <Bar dataKey="pctTerjual" name="% Terjual" radius={[2, 2, 0, 0]}>
-                      {perumahanChart.map((p, i) => (
-                        <Cell key={i} fill={p.pctTerjual >= 80 ? "#ef4444" : p.pctTerjual >= 50 ? "#f97316" : p.pctTerjual >= 30 ? "#eab308" : "#22c55e"} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+              <div className="overflow-x-auto">
+                <div style={{ width: `${Math.max(800, perumahanChart.length * 14)}px`, height: "240px" }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={perumahanChart} margin={{ top: 8, right: 8, left: -10, bottom: 60 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="namaPerumahan" tick={{ fontSize: 7 }} angle={-45} textAnchor="end"
+                        tickFormatter={(v) => v.slice(0, 12)} />
+                      <YAxis tick={{ fontSize: 10 }} unit="%" domain={[0, 100]} />
+                      <Tooltip
+                        formatter={(v: number) => [`${v}%`, "% Terjual"]}
+                        labelFormatter={(_, payload) => payload?.[0]?.payload?.namaPerumahan ?? ""}
+                        contentStyle={{ fontSize: 11 }}
+                      />
+                      <Bar dataKey="pctTerjual" name="% Terjual" radius={[2, 2, 0, 0]}>
+                        {perumahanChart.map((p, i) => (
+                          <Cell key={i} fill={p.pctTerjual >= 80 ? "#ef4444" : p.pctTerjual >= 50 ? "#f97316" : p.pctTerjual >= 30 ? "#eab308" : "#22c55e"} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
-              <div className="flex gap-4 justify-center mt-2">
-                {[["≥80%", "#ef4444", "Sangat Laris"], ["50-79%", "#f97316", "Laris"], ["30-49%", "#eab308", "Sedang"], ["<30%", "#22c55e", "Tersedia"]].map(([label, color, desc]) => (
+              <div className="flex gap-4 justify-center mt-2 flex-wrap">
+                {[["≥80%", "#ef4444", "Sangat Laris"], ["50–79%", "#f97316", "Laris"], ["30–49%", "#eab308", "Sedang"], ["<30%", "#22c55e", "Tersedia Banyak"]].map(([label, color, desc]) => (
                   <span key={label} className="flex items-center gap-1 text-xs text-muted-foreground">
                     <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: color }} />
                     {label} {desc}
@@ -316,13 +386,14 @@ export default function Analytics() {
           </Card>
         </TabsContent>
 
+        {/* === TAB DEVELOPER === */}
         <TabsContent value="developer" className="space-y-5 mt-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Card>
+            <Card className="shadow-sm">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Building className="h-4 w-4 text-purple-600" />
-                  Top 15 Developer — Unit Terjual & Market Share
+                  Top 15 Developer — Est. Unit Terjual & Market Share
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-2">
@@ -338,20 +409,17 @@ export default function Analytics() {
                       <YAxis type="category" dataKey="namaDeveloper" tick={{ fontSize: 9 }} width={110}
                         tickFormatter={(v) => v.length > 18 ? v.slice(0, 18) + "…" : v} />
                       <Tooltip
-                        formatter={(v: number, name: string) => [
-                          `${v.toLocaleString()} unit`,
-                          name === "estTerjual" ? "Est. Terjual" : "Stok",
-                        ]}
+                        formatter={(v: number) => [`${v.toLocaleString()} unit terjual`, "Est. Terjual"]}
                         labelFormatter={(_, payload) => {
                           const p = payload?.[0]?.payload;
                           return p ? `${p.namaDeveloper} | ${p.jumlahLokasi} lokasi | ${p.pctKabupaten}% market share` : "";
                         }}
+                        contentStyle={{ fontSize: 11 }}
                       />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
                       <Bar dataKey="estTerjual" name="Est. Terjual" fill="#8b5cf6">
                         <LabelList dataKey="pctKabupaten" position="right"
                           formatter={(v: number) => `${v}%`}
-                          style={{ fontSize: 9, fill: "#6b7280" }} />
+                          style={{ fontSize: 10, fill: "#374151", fontWeight: "700" }} />
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
@@ -360,19 +428,19 @@ export default function Analytics() {
             </Card>
 
             <div className="space-y-4">
-              <Card>
+              <Card className="shadow-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">Market Share Developer (Top 8)</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-[220px]">
+                  <div className="h-[200px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie data={devPieData} cx="50%" cy="50%" outerRadius={80} dataKey="value"
-                          label={({ name, percent }) => `${(percent * 100).toFixed(0)}%`} labelLine>
+                        <Pie data={devPieData} cx="50%" cy="50%" outerRadius={75} dataKey="value"
+                          label={({ percent }) => `${(percent * 100).toFixed(0)}%`} labelLine>
                           {devPieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                         </Pie>
-                        <Tooltip formatter={(v: number) => [`${v} unit`, "Est. Terjual"]} />
+                        <Tooltip formatter={(v: number) => [`${v.toLocaleString()} unit terjual`, "Est. Terjual"]} />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
@@ -387,10 +455,10 @@ export default function Analytics() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="shadow-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">Top 5 Developer — Efficiency Rate</CardTitle>
-                  <p className="text-xs text-muted-foreground">% unit terjual dari total unit developer</p>
+                  <p className="text-xs text-muted-foreground">% est. unit terjual dari total unit developer</p>
                 </CardHeader>
                 <CardContent className="px-3 space-y-3">
                   {top5Developer.map((d, i) => (
@@ -406,7 +474,7 @@ export default function Analytics() {
                       </div>
                       <Progress value={d.pctTerjual} className="h-2" />
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {d.estTerjual} / {d.totalUnit} unit · {d.jumlahLokasi} lokasi
+                        {d.estTerjual} unit terjual / {d.totalUnit} total · {d.jumlahLokasi} lokasi
                       </p>
                     </div>
                   ))}
@@ -416,9 +484,10 @@ export default function Analytics() {
           </div>
         </TabsContent>
 
+        {/* === TAB KECAMATAN === */}
         <TabsContent value="kecamatan" className="space-y-5 mt-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Card>
+            <Card className="shadow-sm">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <MapPin className="h-4 w-4 text-blue-600" />
@@ -428,10 +497,7 @@ export default function Analytics() {
               <CardContent className="px-2">
                 <div className="h-[380px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={kecamatanChart}
-                      margin={{ top: 8, right: 8, left: -10, bottom: 0 }}
-                    >
+                    <BarChart data={kecamatanChart} margin={{ top: 8, right: 8, left: -10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="nama" tick={{ fontSize: 9 }} angle={-30} textAnchor="end" height={50} />
                       <YAxis tick={{ fontSize: 10 }} />
@@ -441,6 +507,7 @@ export default function Analytics() {
                           const p = payload?.[0]?.payload;
                           return p ? `${p.nama} | ${p.pctTerjual}% dipilih | ${p.pctKabupaten}% share kab.` : "";
                         }}
+                        contentStyle={{ fontSize: 11 }}
                       />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
                       <Bar dataKey="supply" name="Supply" fill="#3b82f6" radius={[2, 2, 0, 0]} />
@@ -453,7 +520,7 @@ export default function Analytics() {
             </Card>
 
             <div className="space-y-4">
-              <Card>
+              <Card className="shadow-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">Radar — % Serapan per Kecamatan</CardTitle>
                 </CardHeader>
@@ -467,19 +534,19 @@ export default function Analytics() {
                         <Radar name="% Terjual" dataKey="% Terjual" stroke="#22c55e" fill="#22c55e" fillOpacity={0.4} />
                         <Radar name="% Peminatan" dataKey="% Peminatan" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
-                        <Tooltip />
+                        <Tooltip contentStyle={{ fontSize: 11 }} />
                       </RadarChart>
                     </ResponsiveContainer>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="shadow-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">% Serapan Kecamatan — Ranking</CardTitle>
                 </CardHeader>
                 <CardContent className="px-3 space-y-2.5 max-h-48 overflow-y-auto">
-                  {kecamatanChart.sort((a, b) => b.pctTerjual - a.pctTerjual).map((k, i) => (
+                  {[...kecamatanChart].sort((a, b) => b.pctTerjual - a.pctTerjual).map((k, i) => (
                     <div key={k.nama}>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs truncate max-w-[160px]">#{i + 1} {k.nama}</span>
@@ -487,10 +554,7 @@ export default function Analytics() {
                           {k.pctTerjual}%
                         </span>
                       </div>
-                      <Progress
-                        value={k.pctTerjual}
-                        className="h-1.5"
-                      />
+                      <Progress value={k.pctTerjual} className="h-1.5" />
                     </div>
                   ))}
                 </CardContent>
@@ -498,7 +562,7 @@ export default function Analytics() {
             </div>
           </div>
 
-          <Card>
+          <Card className="shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Funnel Absorpsi — Kabupaten Lumajang</CardTitle>
               <p className="text-xs text-muted-foreground">Dari total supply hingga unit sisa</p>
@@ -510,7 +574,7 @@ export default function Analytics() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="step" tick={{ fontSize: 12, fontWeight: "500" }} />
                     <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip formatter={(v: number) => [`${v.toLocaleString()} unit`, ""]} />
+                    <Tooltip formatter={(v: number) => [`${v.toLocaleString()} unit`, ""]} contentStyle={{ fontSize: 11 }} />
                     <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                       {funnelData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
                       <LabelList dataKey="value" position="top"
@@ -524,20 +588,23 @@ export default function Analytics() {
           </Card>
         </TabsContent>
 
+        {/* === TAB TREN === */}
         <TabsContent value="trend" className="space-y-5 mt-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Card>
+            <Card className="shadow-sm">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Activity className="h-4 w-4 text-orange-500" />
                   Timeline Penjualan Terdeteksi (30 Hari Terakhir)
                 </CardTitle>
-                <p className="text-xs text-muted-foreground">Unit terjual per hari berdasarkan sale events</p>
+                <p className="text-xs text-muted-foreground">Unit terjual per hari berdasarkan sale events terdeteksi</p>
               </CardHeader>
               <CardContent className="px-2">
                 {saleTimeline.length === 0 ? (
-                  <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
-                    Belum ada sale events terdeteksi
+                  <div className="flex flex-col items-center justify-center h-48 text-muted-foreground text-sm gap-2">
+                    <Activity className="h-8 w-8 opacity-30" />
+                    <p>Belum ada sale events terdeteksi</p>
+                    <p className="text-xs text-center">Tekan "Refresh Data" minimal 2 kali untuk mendeteksi penurunan stok</p>
                   </div>
                 ) : (
                   <div className="h-[260px]">
@@ -546,7 +613,7 @@ export default function Analytics() {
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="date" tick={{ fontSize: 9 }} tickFormatter={(v) => v.slice(5)} />
                         <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                        <Tooltip formatter={(v: number) => [`${v} unit`, "Unit Terjual"]} />
+                        <Tooltip formatter={(v: number) => [`${v} unit`, "Unit Terjual"]} contentStyle={{ fontSize: 11 }} />
                         <Area type="monotone" dataKey="units" stroke="#f97316" fill="#fed7aa" strokeWidth={2} />
                       </AreaChart>
                     </ResponsiveContainer>
@@ -555,27 +622,28 @@ export default function Analytics() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="shadow-sm">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <BarChart2 className="h-4 w-4 text-blue-600" />
                   Tren Snapshot Bulanan — Total Unit
                 </CardTitle>
-                <p className="text-xs text-muted-foreground">Pergerakan total unit terdaftar per bulan (perubahan = penjualan)</p>
+                <p className="text-xs text-muted-foreground">Penurunan total unit antar bulan = estimasi penjualan</p>
               </CardHeader>
               <CardContent className="px-2">
                 {snapshots.length === 0 ? (
-                  <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
-                    Belum ada snapshot bulanan tersedia
+                  <div className="flex flex-col items-center justify-center h-48 text-muted-foreground text-sm gap-2">
+                    <BarChart2 className="h-8 w-8 opacity-30" />
+                    <p>Belum ada data snapshot bulanan</p>
                   </div>
                 ) : (
                   <div className="h-[260px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={snapshots} margin={{ top: 8, right: 8, left: -10, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                        <XAxis dataKey="month" tick={{ fontSize: 9 }} />
                         <YAxis tick={{ fontSize: 10 }} />
-                        <Tooltip formatter={(v: number) => [`${v.toLocaleString()} unit`, "Total Unit"]} />
+                        <Tooltip formatter={(v: number) => [`${v.toLocaleString()} unit`, "Total Unit"]} contentStyle={{ fontSize: 11 }} />
                         <Line type="monotone" dataKey="totalUnit" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4, fill: "#3b82f6" }} />
                       </LineChart>
                     </ResponsiveContainer>
@@ -584,28 +652,6 @@ export default function Analytics() {
               </CardContent>
             </Card>
           </div>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Ringkasan Performa</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {[
-                  { label: "Unit Berhasil Dipilih", value: summary.totalPilihan, desc: `${summary.pctTerjual}% dari supply`, color: "text-orange-600" },
-                  { label: "Unit Masih Tersedia", value: summary.totalSisa, desc: `${(100 - summary.pctTerjual).toFixed(1)}% sisa`, color: "text-green-600" },
-                  { label: "Perumahan Terdaftar", value: summary.totalPerumahan, desc: "lokasi aktif", color: "text-blue-600" },
-                  { label: "Unit Terjual (Events)", value: summary.totalSaleEvents, desc: "terdeteksi antar refresh", color: "text-purple-600" },
-                ].map((item) => (
-                  <div key={item.label} className="rounded-lg border p-4 text-center">
-                    <div className={`text-2xl font-bold ${item.color}`}>{item.value.toLocaleString()}</div>
-                    <div className="text-xs font-medium mt-1">{item.label}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{item.desc}</div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
       </Tabs>
     </div>

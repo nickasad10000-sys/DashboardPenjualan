@@ -13,7 +13,7 @@ import {
 } from "recharts";
 import {
   Building, MapPin, Package, Loader2, Activity,
-  ChevronDown, ChevronRight, Search, TrendingDown,
+  ChevronDown, ChevronRight, Search, TrendingDown, Home,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -308,20 +308,20 @@ function StokModal({ open, onClose, summary }: {
         <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
           {summary && (
             <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-5">
-              <div className="rounded-lg border p-3 sm:p-4 text-center">
+              <div className="rounded-xl border p-3 sm:p-4 text-center bg-gradient-to-br from-blue-50 to-white">
                 <div className="text-lg sm:text-2xl font-bold text-blue-600">{(summary.totalStok ?? 0).toLocaleString()}</div>
                 <div className="text-xs sm:text-sm text-muted-foreground mt-1">Total Stok</div>
               </div>
-              <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 sm:p-4 text-center">
+              <div className="rounded-xl border border-yellow-200 bg-gradient-to-br from-yellow-50 to-white p-3 sm:p-4 text-center">
                 <div className="text-lg sm:text-2xl font-bold text-yellow-600">{(summary.totalDipilih ?? 0).toLocaleString()}</div>
                 <div className="text-xs sm:text-sm text-muted-foreground mt-1">Dipilih</div>
                 <div className="text-xs text-yellow-600 mt-0.5">
                   {(summary.totalStok ?? 0) > 0 ? (((summary.totalDipilih ?? 0) / (summary.totalStok ?? 1)) * 100).toFixed(1) : 0}%
                 </div>
               </div>
-              <div className="rounded-lg border border-green-200 bg-green-50 p-3 sm:p-4 text-center">
+              <div className="rounded-xl border border-green-200 bg-gradient-to-br from-green-50 to-white p-3 sm:p-4 text-center">
                 <div className="text-lg sm:text-2xl font-bold text-green-600">{(summary.totalSisa ?? 0).toLocaleString()}</div>
-                <div className="text-xs sm:text-sm text-muted-foreground mt-1">Sisa</div>
+                <div className="text-xs sm:text-sm text-muted-foreground mt-1">Sisa Tersedia</div>
                 <div className="text-xs text-green-600 mt-0.5">
                   {(summary.totalStok ?? 0) > 0 ? (((summary.totalSisa ?? 0) / (summary.totalStok ?? 1)) * 100).toFixed(1) : 0}%
                 </div>
@@ -352,8 +352,8 @@ function StokModal({ open, onClose, summary }: {
                       <TableHead className="min-w-[150px]">Perumahan</TableHead>
                       <TableHead className="min-w-[90px]">Kecamatan</TableHead>
                       <TableHead className="text-right min-w-[70px]">Total Stok</TableHead>
-                      <TableHead className="text-right min-w-[80px]">Est. Dipilih</TableHead>
-                      <TableHead className="text-right min-w-[60px]">Sisa</TableHead>
+                      <TableHead className="text-right min-w-[90px]">Est. Terjual</TableHead>
+                      <TableHead className="text-right min-w-[80px]">Sisa Tersedia</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -370,11 +370,11 @@ function StokModal({ open, onClose, summary }: {
                           </TableCell>
                           <TableCell className="text-right font-semibold">{l.unit.toLocaleString()}</TableCell>
                           <TableCell className="text-right">
-                            <span className={`font-semibold ${pct >= 80 ? "text-red-600" : pct >= 50 ? "text-yellow-600" : "text-blue-600"}`}>
-                              {l.estPilihan.toLocaleString()}
+                            <span className={`font-semibold ${pct >= 80 ? "text-red-600" : pct >= 50 ? "text-yellow-600" : "text-green-600"}`}>
+                              {l.estPilihan.toLocaleString()} unit
                             </span>
                           </TableCell>
-                          <TableCell className="text-right text-green-600 font-semibold">{l.estSisa.toLocaleString()}</TableCell>
+                          <TableCell className="text-right text-blue-600 font-semibold">{l.estSisa.toLocaleString()} unit</TableCell>
                         </TableRow>
                       );
                     })}
@@ -389,7 +389,7 @@ function StokModal({ open, onClose, summary }: {
                 </Table>
               </div>
               <p className="text-xs text-muted-foreground mt-3">
-                * "Est. Dipilih" = estimasi proporsional dari data dipilih per kecamatan
+                * "Est. Terjual" = estimasi proporsional dari data dipilih per kecamatan · "Sisa Tersedia" = unit belum terjual
               </p>
             </>
           )}
@@ -400,27 +400,41 @@ function StokModal({ open, onClose, summary }: {
 }
 
 function ClickableStatCard({
-  title, value, icon: Icon, description, onClick,
+  title, value, icon: Icon, description, sub, color = "blue", onClick,
 }: {
   title: string;
   value: string | number;
   icon: React.ElementType;
   description?: string;
+  sub?: string;
+  color?: "blue" | "green" | "purple" | "orange";
   onClick: () => void;
 }) {
+  const colorMap = {
+    blue: "from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800",
+    green: "from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800",
+    purple: "from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800",
+    orange: "from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700",
+  };
+
   return (
     <Card
-      className="cursor-pointer transition-all border-2 hover:border-blue-400 hover:bg-blue-50/50 active:scale-[0.98]"
+      className={`cursor-pointer transition-all duration-200 hover:shadow-lg active:scale-[0.98] bg-gradient-to-br ${colorMap[color]} text-white border-0`}
       onClick={onClick}
     >
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-4 px-4">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-blue-600" />
-      </CardHeader>
-      <CardContent className="px-4 pb-4">
-        <div className="text-2xl font-bold">{value}</div>
-        {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
-        <p className="text-xs text-blue-500 mt-1.5 font-medium">Klik untuk detail →</p>
+      <CardContent className="px-5 py-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-sm font-medium text-white/80">{title}</p>
+            <p className="text-3xl font-bold mt-1 text-white">{value}</p>
+            {description && <p className="text-xs text-white/70 mt-1">{description}</p>}
+            {sub && <p className="text-xs text-white/60 mt-0.5">{sub}</p>}
+            <p className="text-xs text-white/80 mt-2 font-medium underline underline-offset-2">Klik untuk detail →</p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+            <Icon className="h-5 w-5 text-white" />
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -488,7 +502,7 @@ export default function Dashboard() {
 
   const monthlyRankingChartData = useMemo(() => {
     return (monthlyRanking?.ranking ?? []).map((r) => ({
-      name: r.namaPerumahan.length > 22 ? r.namaPerumahan.slice(0, 22) + "…" : r.namaPerumahan,
+      name: r.namaPerumahan.length > 24 ? r.namaPerumahan.slice(0, 24) + "…" : r.namaPerumahan,
       fullName: r.namaPerumahan,
       developer: r.namaDeveloper,
       kecamatan: r.kecamatan,
@@ -509,7 +523,7 @@ export default function Dashboard() {
       <div className="space-y-6 p-1">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-28 bg-muted animate-pulse rounded-xl" />
+            <div key={i} className="h-32 bg-muted animate-pulse rounded-xl" />
           ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -534,8 +548,12 @@ export default function Dashboard() {
 
   const pieData = [
     { name: "Dipilih", value: summary.totalDipilih, color: "#eab308" },
-    { name: "Sisa Stok", value: summary.totalSisa, color: "#22c55e" },
+    { name: "Sisa Tersedia", value: summary.totalSisa, color: "#22c55e" },
   ];
+
+  const allSaleItems = saleEvents.flatMap((ev) =>
+    ev.listingChanges.map((c) => ({ ...c, recordedAt: ev.recordedAt, eventId: ev.id }))
+  ).sort((a, b) => b.recordedAt.localeCompare(a.recordedAt));
 
   return (
     <div className="space-y-5 p-1">
@@ -547,7 +565,7 @@ export default function Dashboard() {
       </div>
 
       {isScrapingInProgress && (
-        <Card className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30">
+        <Card className="border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30">
           <CardContent className="pt-4 pb-4 px-4">
             <div className="flex items-start gap-3">
               <Loader2 className="h-5 w-5 text-blue-600 animate-spin mt-0.5 shrink-0" />
@@ -573,6 +591,7 @@ export default function Dashboard() {
           value={isScrapingInProgress ? `${summary.totalLokasi}…` : summary.totalLokasi}
           icon={MapPin}
           description="Lihat peta & daftar perumahan"
+          color="blue"
           onClick={() => setOpenModal("lokasi")}
         />
         <ClickableStatCard
@@ -580,30 +599,33 @@ export default function Dashboard() {
           value={summary.totalDeveloper}
           icon={Building}
           description="Lihat semua developer aktif"
+          color="purple"
           onClick={() => setOpenModal("developer")}
         />
         <ClickableStatCard
           title="Total Stok"
           value={(summary.totalStok ?? 0).toLocaleString()}
           icon={Package}
-          description={`${(summary.totalDipilih ?? 0).toLocaleString()} dipilih · ${(summary.totalSisa ?? 0).toLocaleString()} tersedia`}
+          description={`${(summary.totalDipilih ?? 0).toLocaleString()} dipilih`}
+          sub={`${(summary.totalSisa ?? 0).toLocaleString()} unit tersedia`}
+          color="green"
           onClick={() => setOpenModal("stok")}
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm sm:text-base">Supply vs Peminat per Kecamatan (Top 10)</CardTitle>
+            <CardTitle className="text-sm sm:text-base font-semibold">Supply vs Peminat per Kecamatan (Top 10)</CardTitle>
           </CardHeader>
           <CardContent className="px-2 sm:px-6">
             <div className="h-[280px] sm:h-[320px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topKecamatan} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip />
+                  <Tooltip contentStyle={{ fontSize: 11 }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="Total Stok" fill="#3b82f6" radius={[3, 3, 0, 0]} />
                   <Bar dataKey="Sudah Dipilih" fill="#eab308" radius={[3, 3, 0, 0]} />
@@ -613,9 +635,9 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm sm:text-base">Proporsi Stok</CardTitle>
+            <CardTitle className="text-sm sm:text-base font-semibold">Proporsi Stok</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col items-center">
             <div className="h-[200px] w-full">
@@ -634,14 +656,14 @@ export default function Dashboard() {
                       <Cell key={i} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip contentStyle={{ fontSize: 11 }} />
                   <Legend verticalAlign="bottom" height={30} wrapperStyle={{ fontSize: 12 }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
             <div className="mt-2 text-center">
               <div className="text-xs font-medium text-muted-foreground">Tingkat Dipilih</div>
-              <div className="text-3xl font-bold mt-0.5">
+              <div className="text-3xl font-bold mt-0.5 text-yellow-600">
                 {summary.totalStok > 0
                   ? ((summary.totalDipilih / summary.totalStok) * 100).toFixed(1)
                   : "0.0"}%
@@ -652,54 +674,64 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <Card>
+      {/* Aktivitas Penjualan Terbaru */}
+      <Card className="shadow-sm">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-              <TrendingDown className="h-4 w-4 text-green-600" />
+            <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center">
+                <TrendingDown className="h-4 w-4 text-green-600" />
+              </div>
               Aktivitas Penjualan Terbaru
             </CardTitle>
             {saleEventsData && saleEventsData.count > 0 && (
-              <Badge variant="secondary" className="text-xs">
+              <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">
                 {saleEventsData.totalLaku.toLocaleString()} unit terjual
               </Badge>
             )}
           </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Tersimpan 30 hari · Terdeteksi otomatis saat stok berkurang · Tetap ada setelah refresh/tutup browser
+          </p>
         </CardHeader>
         <CardContent>
-          {saleEvents.length === 0 ? (
+          {allSaleItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                <Activity className="h-5 w-5 text-muted-foreground" />
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                <Home className="h-6 w-6 text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Belum ada penjualan terdeteksi</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Penjualan terdeteksi otomatis saat stok unit berkurang antar refresh
+                  Tekan "Refresh Data" minimal 2x untuk mendeteksi perubahan stok
                 </p>
               </div>
             </div>
           ) : (
             <div className="space-y-2">
-              {saleEvents.slice(0, 5).flatMap((ev) =>
-                ev.listingChanges.map((c) => (
-                  <div key={`${ev.id}-${c.idLokasi}`} className="flex items-center justify-between rounded-lg border p-3 gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium leading-tight truncate">{c.namaPerumahan}</p>
+              {allSaleItems.slice(0, 10).map((c, idx) => (
+                <div key={`${c.eventId}-${c.idLokasi}-${idx}`}
+                  className="flex items-center justify-between rounded-xl border border-green-100 bg-gradient-to-r from-green-50/50 to-white p-3 gap-3 hover:shadow-sm transition-shadow">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
+                      <Home className="h-4 w-4 text-green-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold leading-tight truncate">{c.namaPerumahan}</p>
                       <p className="text-xs text-muted-foreground truncate">{c.namaDeveloper} · {c.kecamatan}</p>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-bold text-green-600">−{c.unitLaku} unit</p>
-                      <p className="text-xs text-muted-foreground">
-                        {format(new Date(ev.recordedAt), "dd MMM", { locale: id })}
-                      </p>
-                    </div>
                   </div>
-                ))
-              )}
-              {saleEvents.length > 5 && (
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-bold text-green-600">Terjual {c.unitLaku} unit</p>
+                    <p className="text-xs text-muted-foreground">
+                      {format(new Date(c.recordedAt), "dd MMM yyyy", { locale: id })}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {allSaleItems.length > 10 && (
                 <p className="text-xs text-center text-muted-foreground pt-1">
-                  +{saleEvents.flatMap(e => e.listingChanges).length - 5} transaksi lainnya tercatat
+                  +{allSaleItems.length - 10} transaksi lainnya tercatat (lihat Export untuk data lengkap)
                 </p>
               )}
             </div>
@@ -707,28 +739,31 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      <Card>
+      {/* Ranking Penjualan Bulan Ini */}
+      <Card className="shadow-sm">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between gap-2">
-            <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-              <Activity className="h-4 w-4 text-orange-500" />
+            <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-orange-100 flex items-center justify-center">
+                <Activity className="h-4 w-4 text-orange-500" />
+              </div>
               Ranking Penjualan Bulan Ini — {monthlyBulanLabel}
             </CardTitle>
             {monthlyRanking && monthlyRanking.totalLaku > 0 && (
-              <Badge variant="secondary" className="text-xs shrink-0">
-                {monthlyRanking.totalLaku} unit terjual
+              <Badge className="bg-orange-100 text-orange-700 border-orange-200 text-xs shrink-0">
+                {monthlyRanking.totalLaku} unit terjual bulan ini
               </Badge>
             )}
           </div>
           <p className="text-xs text-muted-foreground">
-            Unit terjual yang terdeteksi bulan ini berdasarkan penurunan stok antar refresh — lihat Analisa Detail untuk ranking total
+            Unit terjual yang terdeteksi bulan ini berdasarkan penurunan stok antar refresh
           </p>
         </CardHeader>
         <CardContent className="px-2 sm:px-4">
           {monthlyRankingChartData.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                <Activity className="h-5 w-5 text-muted-foreground" />
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                <Activity className="h-6 w-6 text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Belum ada penjualan terdeteksi bulan ini</p>
@@ -745,18 +780,19 @@ export default function Dashboard() {
                   layout="vertical"
                   margin={{ top: 4, right: 48, left: 4, bottom: 4 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" />
                   <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={130} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={135} />
                   <Tooltip
-                    formatter={(v: number) => [`${v} unit`, "Unit Terjual"]}
+                    formatter={(v: number) => [`${v} unit terjual`, "Unit Terjual Bulan Ini"]}
                     labelFormatter={(_, payload) => {
                       const p = payload?.[0]?.payload;
                       return p ? `${p.fullName} · ${p.kecamatan}` : "";
                     }}
+                    contentStyle={{ fontSize: 11 }}
                   />
                   <Bar dataKey="unitLaku" name="Unit Terjual" fill="#f97316" radius={[0, 3, 3, 0]}>
-                    <LabelList dataKey="unitLaku" position="right" style={{ fontSize: 10, fill: "#374151", fontWeight: "600" }} />
+                    <LabelList dataKey="unitLaku" position="right" style={{ fontSize: 10, fill: "#374151", fontWeight: "700" }} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
