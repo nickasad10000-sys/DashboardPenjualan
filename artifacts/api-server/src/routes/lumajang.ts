@@ -93,6 +93,8 @@ function loadPersistedData(): void {
       if (Array.isArray(raw.events)) {
         saleEvents = raw.events;
         if (Array.isArray(raw.snapshots)) salesSnapshots = raw.snapshots;
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        saleEvents = saleEvents.filter((ev: SaleEvent) => ev.recordedAt >= thirtyDaysAgo);
         logger.info({ count: saleEvents.length }, "Loaded persisted sale events");
       }
     }
@@ -613,8 +615,7 @@ function computeKecamatanFromListings(): KecamatanRaw[] {
 }
 
 function ensureScraping(): void {
-  const cacheExpired = !listingsCache || Date.now() - listingsCache.fetchedAt >= CACHE_TTL_MS;
-  if (cacheExpired && !scraping.inProgress && !scrapePromise) {
+  if (!listingsCache && !scraping.inProgress && !scrapePromise) {
     scrapePromise = runFullScrape().catch((err) => {
       logger.error({ err }, "Full scrape failed");
       return [];
@@ -826,6 +827,44 @@ router.get("/lumajang/sale-events", (_req, res) => {
     events: saleEvents,
     totalLaku: saleEvents.reduce((s, e) => s + e.totalLaku, 0),
     count: saleEvents.length,
+  });
+});
+
+router.get("/lumajang/sale-events-monthly", (_req, res) => {
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+  const monthEvents = saleEvents.filter((ev) => ev.recordedAt.startsWith(currentMonth));
+
+  const byPerumahan = new Map<string, { idLokasi: string; namaPerumahan: string; namaDeveloper: string; kecamatan: string; unitLaku: number }>();
+  for (const ev of monthEvents) {
+    for (const c of ev.listingChanges) {
+      const prev = byPerumahan.get(c.idLokasi);
+      if (prev) {
+        prev.unitLaku += c.unitLaku;
+      } else {
+        byPerumahan.set(c.idLokasi, {
+          idLokasi: c.idLokasi,
+          namaPerumahan: c.namaPerumahan,
+          namaDeveloper: c.namaDeveloper,
+          kecamatan: c.kecamatan,
+          unitLaku: c.unitLaku,
+        });
+      }
+    }
+  }
+
+  const ranking = [...byPerumahan.values()]
+    .sort((a, b) => b.unitLaku - a.unitLaku)
+    .slice(0, 15);
+
+  const totalLaku = monthEvents.reduce((s, e) => s + e.totalLaku, 0);
+
+  res.json({
+    bulan: currentMonth,
+    events: monthEvents.length,
+    totalLaku,
+    ranking,
   });
 });
 

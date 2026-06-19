@@ -1,0 +1,14 @@
+{
+  "webhookUrl": "Https://wa.me/+6281232866992",
+  "webhookEnabled": true,
+  "emailEnabled": false,
+  "emailSmtp": "",
+  "emailPort": 587,
+  "emailUser": "",
+  "emailPass": "",
+  "emailTo": "",
+  "notifyOnSale": true,
+  "notifyOnRefreshComplete": true,
+  "lastTestedAt": "2026-06-19T02:50:45.924Z",
+  "lastSentAt": null
+}

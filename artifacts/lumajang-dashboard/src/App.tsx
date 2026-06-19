@@ -7,7 +7,6 @@ import { Layout } from "@/components/layout";
 import Dashboard from "@/pages/dashboard";
 import Analytics from "@/pages/analytics";
 import ExportPage from "@/pages/export";
-import Notifications from "@/pages/notifications";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,7 +24,6 @@ function Router() {
         <Route path="/" component={Dashboard} />
         <Route path="/analytics" component={Analytics} />
         <Route path="/export" component={ExportPage} />
-        <Route path="/notifications" component={Notifications} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

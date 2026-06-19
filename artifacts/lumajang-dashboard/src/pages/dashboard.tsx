@@ -13,7 +13,7 @@ import {
 } from "recharts";
 import {
   Building, MapPin, Package, Loader2, Activity,
-  ChevronDown, ChevronRight, Search, TrendingDown, TrendingUp,
+  ChevronDown, ChevronRight, Search, TrendingDown,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -426,38 +426,20 @@ function ClickableStatCard({
   );
 }
 
-const CHART_COLORS = ["#3b82f6", "#eab308", "#22c55e", "#f97316", "#8b5cf6", "#ec4899", "#14b8a6", "#f43f5e"];
-
-interface PerumahanSalesRow {
-  name: string;
-  fullName: string;
-  developer: string;
+interface MonthlyRankingItem {
+  idLokasi: string;
+  namaPerumahan: string;
+  namaDeveloper: string;
   kecamatan: string;
-  totalUnit: number;
-  estTerjual: number;
-  estSisa: number;
-  pctKabupaten: number;
+  unitLaku: number;
 }
 
-const DEMO_SALE_EVENTS: SaleEventItem[] = [
-  {
-    id: "demo-1",
-    recordedAt: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
-    totalLaku: 8,
-    listingChanges: [
-      { idLokasi: "LMJ001", namaPerumahan: "Griya Lumajang Permai", namaDeveloper: "PT. Mitra Properti", kecamatan: "SUKODONO", unitLaku: 5, unitSebelum: 120, unitSesudah: 115 },
-      { idLokasi: "LMJ002", namaPerumahan: "Perumnas Tempeh Indah", namaDeveloper: "PT. Griya Indah", kecamatan: "TEMPEH", unitLaku: 3, unitSebelum: 80, unitSesudah: 77 },
-    ],
-  },
-  {
-    id: "demo-2",
-    recordedAt: new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString(),
-    totalLaku: 4,
-    listingChanges: [
-      { idLokasi: "LMJ003", namaPerumahan: "Cluster Klakah Asri", namaDeveloper: "PT. Bangun Sejahtera", kecamatan: "KLAKAH", unitLaku: 4, unitSebelum: 60, unitSesudah: 56 },
-    ],
-  },
-];
+interface MonthlyRankingData {
+  bulan: string;
+  events: number;
+  totalLaku: number;
+  ranking: MonthlyRankingItem[];
+}
 
 export default function Dashboard() {
   const [openModal, setOpenModal] = useState<"lokasi" | "developer" | "stok" | null>(null);
@@ -474,12 +456,6 @@ export default function Dashboard() {
   const { data: kecamatan, isLoading: isKecamatanLoading } = useGetLumajangKecamatan({
     query: { placeholderData: (prev) => prev },
   });
-  const { data: allListingsResp } = useGetLumajangListings(
-    { page: 1, limit: 500 },
-    { query: { placeholderData: (prev: typeof allListingsResp) => prev } }
-  );
-  const allListings = (allListingsResp?.data ?? []) as RawListing[];
-
   const { data: saleEventsData } = useQuery<{ events: SaleEventItem[]; totalLaku: number; count: number }>({
     queryKey: ["sale-events"],
     queryFn: async () => {
@@ -499,71 +475,34 @@ export default function Dashboard() {
     ? Math.round((summary.scraping.pagesScraped / summary.scraping.totalPages) * 100)
     : 0;
 
-  const kecMap: Record<string, { supply: number; pilihan: number }> = {};
-  for (const k of kecamatan ?? []) {
-    kecMap[k.namaWilayah?.toUpperCase()] = { supply: k.supply, pilihan: k.pilihan };
-  }
+  const { data: monthlyRanking } = useQuery<MonthlyRankingData>({
+    queryKey: ["sale-events-monthly"],
+    queryFn: async () => {
+      const res = await fetch("/api/lumajang/sale-events-monthly");
+      if (!res.ok) throw new Error("Gagal");
+      return res.json();
+    },
+    refetchInterval: 60000,
+    placeholderData: (prev) => prev,
+  });
 
-  const perumahanSalesData = useMemo((): PerumahanSalesRow[] => {
-    if (allListings.length === 0 || Object.keys(kecMap).length === 0) return [];
+  const monthlyRankingChartData = useMemo(() => {
+    return (monthlyRanking?.ranking ?? []).map((r) => ({
+      name: r.namaPerumahan.length > 22 ? r.namaPerumahan.slice(0, 22) + "…" : r.namaPerumahan,
+      fullName: r.namaPerumahan,
+      developer: r.namaDeveloper,
+      kecamatan: r.kecamatan,
+      unitLaku: r.unitLaku,
+    }));
+  }, [monthlyRanking]);
 
-    const rows = allListings
-      .map((l) => {
-        const unit = parseInt(l.jumlahUnit ?? "0", 10) || 0;
-        const kec = kecMap[l.kecamatan?.toUpperCase()] ?? { supply: 0, pilihan: 0 };
-        const estTerjual = kec.supply > 0 ? Math.round((unit / kec.supply) * kec.pilihan) : 0;
-        const estSisa = Math.max(0, unit - estTerjual);
-        return { l, unit, estTerjual, estSisa };
-      })
-      .filter((r) => r.unit > 0);
-
-    const totalEstTerjual = rows.reduce((s, r) => s + r.estTerjual, 0);
-
-    return rows
-      .sort((a, b) => b.estTerjual - a.estTerjual)
-      .slice(0, 15)
-      .map((r) => ({
-        name: r.l.namaPerumahan.length > 22 ? r.l.namaPerumahan.slice(0, 22) + "…" : r.l.namaPerumahan,
-        fullName: r.l.namaPerumahan,
-        developer: r.l.namaDeveloper,
-        kecamatan: r.l.kecamatan,
-        totalUnit: r.unit,
-        estTerjual: r.estTerjual,
-        estSisa: r.estSisa,
-        pctKabupaten: totalEstTerjual > 0 ? Math.round((r.estTerjual / totalEstTerjual) * 1000) / 10 : 0,
-      }));
-  }, [allListings, kecamatan]);
-
-  const saleEventsChartData = useMemo(() => {
-    const eventsToUse = saleEvents.length > 0 ? saleEvents : DEMO_SALE_EVENTS;
-    const isDemoMode = saleEvents.length === 0;
-
-    const byPerumahan = new Map<string, { name: string; fullName: string; developer: string; unitLaku: number; recordedAt: string }>();
-    for (const ev of eventsToUse.slice(0, 20)) {
-      for (const c of ev.listingChanges) {
-        const prev = byPerumahan.get(c.idLokasi);
-        if (prev) {
-          prev.unitLaku += c.unitLaku;
-        } else {
-          byPerumahan.set(c.idLokasi, {
-            name: c.namaPerumahan.length > 20 ? c.namaPerumahan.slice(0, 20) + "…" : c.namaPerumahan,
-            fullName: c.namaPerumahan,
-            developer: c.namaDeveloper,
-            unitLaku: c.unitLaku,
-            recordedAt: ev.recordedAt,
-          });
-        }
-      }
+  const monthlyBulanLabel = useMemo(() => {
+    if (!monthlyRanking?.bulan) {
+      return new Date().toLocaleString("id-ID", { month: "long", year: "numeric" });
     }
-
-    return {
-      data: [...byPerumahan.values()]
-        .sort((a, b) => b.unitLaku - a.unitLaku)
-        .slice(0, 10)
-        .map((r) => ({ name: r.name, fullName: r.fullName, developer: r.developer, "Unit Terjual": r.unitLaku })),
-      isDemoMode,
-    };
-  }, [saleEvents]);
+    const [yr, mo] = monthlyRanking.bulan.split("-");
+    return new Date(parseInt(yr), parseInt(mo) - 1, 1).toLocaleString("id-ID", { month: "long", year: "numeric" });
+  }, [monthlyRanking]);
 
   if (isLoading || isKecLoading) {
     return (
@@ -768,124 +707,63 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <Card>
-          <CardHeader className="pb-2">
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-blue-600" />
-              Grafik 1 — Unit Terjual per Perumahan (Top 15)
+              <Activity className="h-4 w-4 text-orange-500" />
+              Ranking Penjualan Bulan Ini — {monthlyBulanLabel}
             </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Estimasi unit terjual (total unit × rasio dipilih/supply kecamatan) + % serapan kabupaten
-            </p>
-          </CardHeader>
-          <CardContent className="px-2 sm:px-4">
-            {perumahanSalesData.length === 0 ? (
-              <div className="flex items-center justify-center h-48 text-center">
-                <div>
-                  <Activity className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Menunggu data listing...</p>
-                  <p className="text-xs text-muted-foreground mt-1">Proses scraping berlangsung di background</p>
-                </div>
-              </div>
-            ) : (
-              <div className="h-[360px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={perumahanSalesData}
-                    layout="vertical"
-                    margin={{ top: 4, right: 60, left: 4, bottom: 4 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
-                    <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={112} />
-                    <Tooltip
-                      formatter={(v: number, name: string) => [
-                        name === "estTerjual" ? `${v} unit terjual` : `${v} unit sisa`,
-                        name === "estTerjual" ? "Est. Terjual" : "Sisa",
-                      ]}
-                      labelFormatter={(_, payload) => {
-                        const p = payload?.[0]?.payload as PerumahanSalesRow | undefined;
-                        return p ? `${p.fullName}\n${p.kecamatan} • ${p.pctKabupaten}% serapan kab.` : "";
-                      }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="estTerjual" name="Est. Terjual" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]}>
-                      <LabelList
-                        dataKey="pctKabupaten"
-                        position="right"
-                        formatter={(v: number) => `${v}%`}
-                        style={{ fontSize: 9, fill: "#6b7280" }}
-                      />
-                    </Bar>
-                    <Bar dataKey="estSisa" name="Sisa" stackId="a" fill="#e5e7eb" radius={[0, 3, 3, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+            {monthlyRanking && monthlyRanking.totalLaku > 0 && (
+              <Badge variant="secondary" className="text-xs shrink-0">
+                {monthlyRanking.totalLaku} unit terjual
+              </Badge>
             )}
-            <p className="text-xs text-muted-foreground mt-2 italic">
-              * Label kanan = % serapan dari total penjualan Kab. Lumajang
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between gap-2">
-              <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-                <Activity className="h-4 w-4 text-orange-500" />
-                Grafik 2 — Penjualan Terbaru (per Perumahan)
-              </CardTitle>
-              {saleEventsChartData.isDemoMode && (
-                <Badge variant="outline" className="text-xs border-orange-300 text-orange-600 shrink-0">
-                  Demo Data
-                </Badge>
-              )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Unit terjual yang terdeteksi bulan ini berdasarkan penurunan stok antar refresh — lihat Analisa Detail untuk ranking total
+          </p>
+        </CardHeader>
+        <CardContent className="px-2 sm:px-4">
+          {monthlyRankingChartData.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                <Activity className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Belum ada penjualan terdeteksi bulan ini</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Tekan "Refresh Data" minimal 2x untuk mendeteksi perubahan stok
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {saleEventsChartData.isDemoMode
-                ? "Preview contoh grafik — akan terisi otomatis setelah ada penjualan terdeteksi"
-                : "Unit terjual dari sale events terbaru yang terdeteksi antar refresh"}
-            </p>
-          </CardHeader>
-          <CardContent className="px-2 sm:px-4">
-            <div className="h-[360px]">
+          ) : (
+            <div className="h-[340px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={saleEventsChartData.data}
+                  data={monthlyRankingChartData}
                   layout="vertical"
-                  margin={{ top: 4, right: 24, left: 4, bottom: 4 }}
+                  margin={{ top: 4, right: 48, left: 4, bottom: 4 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                   <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={112} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={130} />
                   <Tooltip
-                    formatter={(v: number) => [`${v} unit`, "Terjual"]}
-                    labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName ?? ""}
+                    formatter={(v: number) => [`${v} unit`, "Unit Terjual"]}
+                    labelFormatter={(_, payload) => {
+                      const p = payload?.[0]?.payload;
+                      return p ? `${p.fullName} · ${p.kecamatan}` : "";
+                    }}
                   />
-                  <Bar
-                    dataKey="Unit Terjual"
-                    fill={saleEventsChartData.isDemoMode ? "#fbbf24" : "#f97316"}
-                    radius={[0, 3, 3, 0]}
-                    opacity={saleEventsChartData.isDemoMode ? 0.7 : 1}
-                  >
-                    <LabelList
-                      dataKey="Unit Terjual"
-                      position="right"
-                      style={{ fontSize: 10, fill: "#374151" }}
-                    />
+                  <Bar dataKey="unitLaku" name="Unit Terjual" fill="#f97316" radius={[0, 3, 3, 0]}>
+                    <LabelList dataKey="unitLaku" position="right" style={{ fontSize: 10, fill: "#374151", fontWeight: "600" }} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            {saleEventsChartData.isDemoMode && (
-              <p className="text-xs text-orange-500 text-center mt-2 italic">
-                ↑ Contoh tampilan — data asli akan muncul setelah refresh dilakukan minimal 2x
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+          )}
+        </CardContent>
+      </Card>
 
       <LokasiModal open={openModal === "lokasi"} onClose={() => setOpenModal(null)} />
       <DeveloperModal open={openModal === "developer"} onClose={() => setOpenModal(null)} />

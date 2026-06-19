@@ -1,5 +1,6 @@
 - [SIKUMBANG full-page scraping](sikumbang-scraping.md) — Lumajang listings tersebar di seluruh 1116 halaman, tidak ada filter kabupaten — harus scrape semua.
 - [Vercel + Supabase migration](vercel-supabase-migration.md) — Full migration pattern: chunked scraping from browser, Supabase for persistence, no long-running processes.
 - [Dashboard map & layout](dashboard-design.md) — MapLibre GL (bukan react-leaflet), koordinat per listing dari SIKUMBANG detail endpoint, fallback kecamatan+jitter. 3 stat card saja, StokModal per perumahan, grafik horizontal bar stok per perumahan.
+- [API server build quirk](api-server-build-quirk.md) — Server runs from pre-compiled dist/, must `pnpm run build` before restarting workflow after any TS route changes.
 - [Dashboard workflow env setup](dashboard-workflow-env.md) — PORT dan BASE_PATH harus di-prefix di workflow command; nilai dari artifact.toml bukan .replit ports.
 - [API client hook signatures](api-hook-signatures.md) — useGetLumajangSummary/Kecamatan/Developers hanya 1 arg (options?). useGetLumajangListings punya 2 arg (params?, options?). Memanggil dengan 2 arg menyebabkan query options diabaikan dan crash.

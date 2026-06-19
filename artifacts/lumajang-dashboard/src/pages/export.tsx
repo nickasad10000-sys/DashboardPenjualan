@@ -2,8 +2,6 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Download, Upload, FileSpreadsheet, FileText, Loader2, CheckCircle2,
@@ -300,50 +298,9 @@ export default function ExportPage() {
           </Card>
 
           {data && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Preview Data — Listings (5 Baris Pertama)</CardTitle>
-              </CardHeader>
-              <CardContent className="px-3">
-                <div className="rounded-md border overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="min-w-[140px]">Nama Perumahan</TableHead>
-                        <TableHead className="min-w-[90px]">Kecamatan</TableHead>
-                        <TableHead className="min-w-[140px]">Developer</TableHead>
-                        <TableHead className="text-right min-w-[70px]">Total Unit</TableHead>
-                        <TableHead className="text-right min-w-[80px]">Est. Terjual</TableHead>
-                        <TableHead className="text-right min-w-[60px]">Sisa</TableHead>
-                        <TableHead className="text-right min-w-[70px]">% Terjual</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.listings.slice(0, 5).map((l) => (
-                        <TableRow key={l.idLokasi}>
-                          <TableCell className="text-sm font-medium">{l.namaPerumahan}</TableCell>
-                          <TableCell>
-                            <Badge variant="secondary" className="text-xs font-normal">{l.kecamatan}</Badge>
-                          </TableCell>
-                          <TableCell className="text-sm">{l.namaDeveloper}</TableCell>
-                          <TableCell className="text-right">{l.totalUnit.toLocaleString()}</TableCell>
-                          <TableCell className="text-right text-green-600 font-semibold">{l.estTerjual.toLocaleString()}</TableCell>
-                          <TableCell className="text-right">{l.estSisa.toLocaleString()}</TableCell>
-                          <TableCell className="text-right">
-                            <Badge variant={l.pctTerjual >= 80 ? "destructive" : l.pctTerjual >= 50 ? "secondary" : "outline"} className="text-xs">
-                              {l.pctTerjual}%
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Terakhir diambil: {data.exportedAt ? new Date(data.exportedAt).toLocaleString("id-ID") : "—"}
-                </p>
-              </CardContent>
-            </Card>
+            <p className="text-xs text-muted-foreground">
+              Terakhir diperbarui: {data.exportedAt ? new Date(data.exportedAt).toLocaleString("id-ID") : "—"}
+            </p>
           )}
         </TabsContent>
 

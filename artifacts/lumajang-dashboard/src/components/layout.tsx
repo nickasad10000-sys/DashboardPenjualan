@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   LayoutDashboard, RefreshCw, Menu, BarChart2, Download,
-  Bell, ChevronRight,
+  ChevronRight,
 } from "lucide-react";
 import {
   useRefreshLumajangData,
@@ -24,7 +24,6 @@ const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/analytics", label: "Analisa Detail", icon: BarChart2 },
   { path: "/export", label: "Export / Import", icon: Download },
-  { path: "/notifications", label: "Notifikasi", icon: Bell },
 ];
 
 function SidebarContent({ currentLocation, onClose }: { currentLocation: string; onClose?: () => void }) {

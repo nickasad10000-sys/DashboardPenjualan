@@ -189,10 +189,10 @@ export default function Analytics() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-green-600" />
-                  Top 20 Perumahan — Unit Terjual & % Serapan Kabupaten
+                  Ranking Penjualan Total — Estimasi Unit Terjual
                 </CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  Estimasi terjual = total unit × (pilihan/supply) per kecamatan. Label = % serapan dari total Kab. Lumajang
+                  Estimasi terjual = total unit × (pilihan/supply) kecamatan · label kanan = % serapan Kab. Lumajang
                 </p>
               </CardHeader>
               <CardContent className="px-2">
@@ -201,29 +201,24 @@ export default function Analytics() {
                     <BarChart
                       data={perumahanChart}
                       layout="vertical"
-                      margin={{ top: 4, right: 64, left: 4, bottom: 4 }}
+                      margin={{ top: 4, right: 70, left: 4, bottom: 4 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                       <XAxis type="number" tick={{ fontSize: 10 }} />
                       <YAxis type="category" dataKey="namaPerumahan" tick={{ fontSize: 8 }} width={110}
                         tickFormatter={(v) => v.length > 20 ? v.slice(0, 20) + "…" : v} />
                       <Tooltip
-                        formatter={(v: number, name: string) => [
-                          `${v.toLocaleString()} unit`,
-                          name === "estTerjual" ? "Est. Terjual" : "Sisa",
-                        ]}
+                        formatter={(v: number) => [`${v.toLocaleString()} unit`, "Est. Terjual"]}
                         labelFormatter={(_, payload) => {
                           const p = payload?.[0]?.payload;
-                          return p ? `${p.namaPerumahan}\n${p.kecamatan} | ${p.pctTerjual}% terjual | ${p.pctKabupaten}% serapan kab.` : "";
+                          return p ? `${p.namaPerumahan} · ${p.kecamatan} · ${p.pctTerjual}% terjual · ${p.pctKabupaten}% serapan kab.` : "";
                         }}
                       />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Bar dataKey="estTerjual" name="Est. Terjual" stackId="a" fill="#22c55e">
+                      <Bar dataKey="estTerjual" name="Est. Terjual" fill="#22c55e" radius={[0, 3, 3, 0]}>
                         <LabelList dataKey="pctKabupaten" position="right"
                           formatter={(v: number) => `${v}%`}
-                          style={{ fontSize: 9, fill: "#6b7280" }} />
+                          style={{ fontSize: 9, fill: "#374151", fontWeight: "600" }} />
                       </Bar>
-                      <Bar dataKey="estSisa" name="Sisa" stackId="a" fill="#e5e7eb" radius={[0, 3, 3, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
